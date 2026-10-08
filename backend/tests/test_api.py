@@ -108,6 +108,20 @@ def test_search_filter_sort_and_pagination(client, meeting):
         assert client.get(BASE, params=params).status_code == 422
 
 
+def test_library_search_participant_or_title_and_preview(client, meeting):
+    path = f'{BASE}/{meeting["id"]}'
+    client.put(f'{path}/summary', json={'overview': 'Ship literal matching with pagination.'})
+    client.put(f'{path}/transcript', json=[segment(meeting, text='Transcript-only keyword: zebras')])
+    for query in ('Priya', 'ARJUN@EXAMPLE.COM', 'planning'):
+        page = client.get(BASE, params={'q': query, 'search_scope': 'library'}).json()
+        assert page['total'] == 1
+        assert page['items'][0]['preview'] == 'Ship literal matching with pagination.'
+    assert client.get(BASE, params={'q': 'zebras', 'search_scope': 'library'}).json()['total'] == 0
+    assert client.get(BASE, params={'q': 'zebras'}).json()['total'] == 1
+    assert client.get(BASE, params={'search_scope': 'invalid'}).status_code == 422
+    assert client.get(BASE, params={'q': 'Priya', 'search_scope': 'library', 'participant': 'absent'}).json()['total'] == 0
+
+
 def test_seed_complete_cascade_and_shared_participants(client, database):
     with database[1]() as db:
         assert seed(db) == 7

@@ -1,6 +1,6 @@
-# Fireflies clone - application foundation
+# Fireflies clone - meetings workspace
 
-Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. This phase provides the API, typed client, original sample data, and a minimal landing shell. The complete library/detail UI is intentionally deferred.
+Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview use live SQLite-backed data. Interactive Transcript and Action Items tabs are deferred.
 
 ## Quick start on Windows
 
@@ -15,7 +15,7 @@ Requires Python 3.11+ and Node.js 20.9+ with npm. Run from the repository root:
 ./scripts/run-frontend.ps1
 ```
 
-Frontend: http://localhost:3000. API documentation: http://localhost:8000/docs. Health: http://localhost:8000/health.
+Frontend library: http://localhost:3000/meetings (`/` redirects here). API documentation: http://localhost:8000/docs. Health: http://localhost:8000/health.
 Scripts stop on a failed command. If local PowerShell execution policy blocks scripts, run the commands below directly rather than changing machine-wide policy.
 
 ## Linux/macOS or manual setup
@@ -69,7 +69,7 @@ Prefix: `/api/v1`. Interactive request/response schemas: `/docs`; machine-readab
 | GET / POST | /meetings/{id}/action-items | List with optional `status`; create (201) |
 | GET / PATCH / DELETE | /meetings/{id}/action-items/{item_id} | Read/edit/delete a meeting-scoped task |
 
-Meeting list query parameters: `q` matches title or transcript text; `participant` matches name/email; `status`; inclusive `date_from`/`date_to`; `sort=started_at|title|duration_seconds`; `order=asc|desc`; `limit=1..100` (default 20); `offset>=0` (default 0). Default order is newest first; IDs break ties. Text matching is case-insensitive for ASCII and treats SQL wildcard characters literally. SQLite's default lower-case matching is not full Unicode case folding. This small dataset uses substring matching; title indexes do not accelerate arbitrary substring searches.
+Meeting list query parameters: `q` matches title or transcript text by default; with `search_scope=library` it matches title OR participant name/email. The separate `participant` filter matches name/email and combines with `q` using AND. Other filters: `status`; inclusive `date_from`/`date_to`; `sort=started_at|title|duration_seconds`; `order=asc|desc`; `limit=1..100` (default 20); `offset>=0` (default 0). Default order is newest first; IDs break ties. Each list item includes a nullable `preview` from the stored summary overview, loaded with one batch query per page. Text matching is case-insensitive for ASCII and treats SQL wildcard characters literally. SQLite's default lower-case matching is not full Unicode case folding. This small dataset uses substring matching; title indexes do not accelerate arbitrary substring searches.
 
 Example meeting creation:
 
@@ -110,6 +110,7 @@ cd backend
 ./.venv/Scripts/python.exe -m pytest -q
 cd ../frontend
 npm run typecheck
+npm run lint
 npm run build
 ```
 
@@ -117,4 +118,44 @@ Tests initialize their databases from the actual migration and exercise CRUD per
 
 The typecheck script first runs `next typegen` so it also works on a clean checkout without a previous build. Next.js generates `next-env.d.ts` locally; it is ignored in Git. The framework-generated `frontend/AGENTS.md` provides additional version-specific guidance.
 
-The full product UI, upload parsing, playback interactions, toasts, and hosted demo will be built in later phases. Nothing has been published or deployed by these setup scripts.
+## Meetings library
+
+The library follows the icon rail, channel sidebar, purple active states, date-grouped cards, and compact search/filter controls shown in [Fireflies' official Meetings guide](https://guide.fireflies.ai/articles/4827382971-learn-about-fireflies-notebook). No user-attached screenshot was available in the implementation turn, and browser automation could not open the logged-in session; official current product screenshots supplied the visual reference.
+
+- `components/workspace/`: reusable navigation, header, and toast provider.
+- `components/meetings/`: library composition, filters, cards, skeletons, empty/error states.
+- `hooks/use-meetings.ts`: debouncing, request cancellation, stale-response protection, retries.
+- `lib/meetings.ts`: API query construction, local-date boundaries, formatting, error messages.
+- Cards come entirely from FastAPI. Filtering and pagination run in the backend, with 12 results per page. Search supports title or participant; advanced filters support participant AND local-calendar date ranges. No frontend fixture cards are rendered.
+- The default-user workspace has no ownership/sharing model, so My Meetings and All Meetings show the same accessible records. Integrations, custom channels, profiles/settings, and voice-agent controls show explicit placeholder toasts.
+- Meeting links navigate to `/meetings/{id}`, which displays a real Overview with summary, saved discussion points, chapters, and action-item previews.
+
+## Meeting detail / Overview
+
+The detail page follows the summary/transcript panel pattern from [Fireflies' official Notepad guide](https://guide.fireflies.ai/articles/6653885315-learn-about-the-fireflies-notepad). No attached detail screenshot was available in the implementation message; the official product screenshots supplied the visual reference.
+
+- Reuses the existing sidebar in a compact rail, with expandable workspace navigation. Header shows title, UTC-backed date in viewer-local time, duration, source, status, and a participant disclosure with every name/email.
+- Overview is active. Transcript and Action Items tabs are visibly disabled/Coming Soon. The context panel reserves space for future transcript work, so the header/layout do not need to be rebuilt.
+- `components/meeting-detail/` separates header, tabs, overview sections, context panel, and loading/error states. `lib/meeting-detail.ts` composes the existing REST endpoints; `hooks/use-meeting-detail.ts` handles cancellation, stale-response protection, and refresh. No backend or schema changes were needed.
+- Metadata loads first. Summary, chapters, and action items then load concurrently. Section failures are isolated; missing summary content receives an empty state, while a missing meeting receives an explicit missing-meeting state. Invalid nonnumeric/unsafe IDs return a route 404.
+- Displays the complete saved overview and notes, with notes split into discussion points without generating text. Chapters display actual timestamps/descriptions and support expansion. The preview shows up to three actual tasks with assignees, deadlines, and status; no completion toggle is simulated.
+- Copy summary, copy link, refresh/retry, participant disclosure, chapter expansion, back navigation, and section links work. Editing, sharing, regeneration, and other future detail controls are disabled. No LLM service is called.
+- Direct links and browser refresh work without first visiting the library. Builds do not fetch backend data.
+
+### Browser verification
+
+Start the seeded backend first, then build the frontend. Playwright starts the production frontend automatically unless a server is already running:
+
+```powershell
+cd frontend
+npm run build
+# Use an installed Edge browser on Windows:
+$env:PLAYWRIGHT_CHANNEL = 'msedge'
+npm run test:e2e
+# Or omit the channel and install Playwright Chromium once:
+npx playwright install chromium
+```
+
+Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled tabs/controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. They do not create, edit, or delete database records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
+
+Interactive Transcript and Action Items tabs, upload parsing, playback interactions, and hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
