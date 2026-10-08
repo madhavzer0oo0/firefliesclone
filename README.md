@@ -62,6 +62,7 @@ Prefix: `/api/v1`. Interactive request/response schemas: `/docs`; machine-readab
 | --- | --- | --- |
 | GET | /meetings | `{items,total,limit,offset}` with search/filter/sort |
 | POST | /meetings | Create metadata and participants; 201 with meeting |
+| POST | /meetings/import | Atomically create metadata, parsed transcript, optional summary and tasks; 201 with meeting, segment_count, warnings |
 | GET / PATCH / DELETE | /meetings/{id} | Read/edit metadata or delete; DELETE returns 204 |
 | GET / PUT | /meetings/{id}/transcript | Read segments, optionally `q`; atomically replace array |
 | GET / PUT | /meetings/{id}/summary | Read or upsert one summary |
@@ -69,7 +70,7 @@ Prefix: `/api/v1`. Interactive request/response schemas: `/docs`; machine-readab
 | GET / POST | /meetings/{id}/action-items | List with optional `status`; create (201) |
 | GET / PATCH / DELETE | /meetings/{id}/action-items/{item_id} | Read/edit/delete a meeting-scoped task |
 
-Meeting list query parameters: `q` matches title or transcript text by default; with `search_scope=library` it matches title OR participant name/email. The separate `participant` filter matches name/email and combines with `q` using AND. Other filters: `status`; inclusive `date_from`/`date_to`; `sort=started_at|title|duration_seconds`; `order=asc|desc`; `limit=1..100` (default 20); `offset>=0` (default 0). Default order is newest first; IDs break ties. Each list item includes a nullable `preview` from the stored summary overview, loaded with one batch query per page. Text matching is case-insensitive for ASCII and treats SQL wildcard characters literally. SQLite's default lower-case matching is not full Unicode case folding. This small dataset uses substring matching; title indexes do not accelerate arbitrary substring searches.
+Meeting list query parameters: `q` matches title or transcript text by default; with `search_scope=library` it matches title OR participant name/email. With `search_scope=everywhere`, `q` matches title OR participant OR transcript text. Independent `title` and `participant` filters combine with `q` using AND. Transcript matches expose a nullable `match` containing the first chronological segment ID, timestamp, speaker label, and bounded snippet. Other filters: `status`; inclusive `date_from`/`date_to`; `sort=started_at|title|duration_seconds`; `order=asc|desc`; `limit=1..100` (default 20); `offset>=0` (default 0). Default order is newest first; IDs break ties. Each list item includes a nullable `preview` from the stored summary overview, loaded with one batch query per page. Text matching is case-insensitive for ASCII and treats SQL wildcard characters literally. SQLite's default lower-case matching is not full Unicode case folding. This small dataset uses substring matching; title indexes do not accelerate arbitrary substring searches.
 
 Example meeting creation:
 
@@ -85,7 +86,7 @@ Example meeting creation:
 
 Creation returns participant IDs for subsequent transcript and task writes. Metadata is created first, then transcript/summary/chapters/tasks can be submitted through their endpoints. Transcript and chapter PUT accept arrays, including `[]` to clear. Summary PUT requires `overview` and defaults `notes` to empty. Task creation requires `text`; assignee and deadline are optional. PATCH omission preserves fields; `assignee_id` and `due_date` accept null to clear. A participant's email resolves an existing person without renaming that person across other meetings.
 
-Missing records return 404; invalid fields, timestamps, or memberships return 422; database conflicts return 409. Validation uses FastAPI's standard `detail` shape; relational validation uses a detail string. No authentication is implemented; this is a local default-user assignment workspace. CORS defaults to the two local frontend origins. Media, bot integrations, and speech-to-text are out of scope. No calls to real AI services occur.
+Missing records return 404; invalid fields, timestamps, or memberships return 422; database conflicts return 409. Validation uses FastAPI's standard `detail` shape; relational validation uses a detail string. No authentication is implemented; this is a local default-user assignment workspace. CORS defaults to the two local frontend origins. Audio/video, bot integrations, and speech-to-text are out of scope; text transcript imports are supported. No calls to real AI services occur.
 
 ## Seed and migration workflow
 
@@ -120,13 +121,46 @@ The typecheck script first runs `next typegen` so it also works on a clean check
 
 ## Meetings library
 
+The dashboard's **Create meeting** action opens `/meetings/new`, a responsive transcript import form with required title, local date/time, duration in minutes, and participants (name/email). Add/remove participants, paste text or choose a file, optionally enter a saved summary and one pending/unassigned task per line, and create. Success navigates to the saved detail page. No audio is transcribed and no AI summary is generated. Errors retain the draft and do not leave a partial meeting.
+
+### Transcript import contract
+
+`POST /api/v1/meetings/import` accepts a JSON request containing `title`, timezone-aware `started_at`, positive integer `duration_seconds`, at least one participant, and `transcript: {format, content, filename?}`. The browser reads uploaded files using fatal UTF-8 decoding; the backend parses their content. Supported extensions are `.txt`, `.vtt`, and `.json` (case-insensitive); filename and format must agree. Maximum UTF-8 content size is 1 MiB, 2,000 segments, 100 total participants/imported identities, and 500 tasks. Names and emails must be unique within the supplied participant list. Labels match participant names case-insensitively.
+
+- **TXT:** timestamped entries use `[MM:SS.mmm] Speaker: text` or `HH:MM:SS Speaker: text`; milliseconds and brackets are optional. Untimestamped continuation lines append to the preceding entry. Start timestamps are preserved; ends use the next start or meeting duration (`timing_source=inferred_end`).
+- **Unstructured TXT:** each nonempty line becomes a segment, evenly spaced across the stated duration (`timing_source=estimated`). A leading `Speaker: text` prefix is treated as an explicit label; otherwise the label is **Unknown speaker**. Timing is an estimate, not inferred from audio. The detail transcript shows this provenance after refresh.
+- **VTT:** `WEBVTT` header, cue identifiers/settings, multiline text, notes/style/region blocks, and `<v Speaker>` voice labels are supported. HTML entities are decoded and cue markup removed. Start/end timestamps, including fractional seconds, are preserved. Split cues containing multiple voices or overlapping ranges before importing.
+- **JSON:** an array of `{speaker?, start_seconds, end_seconds?, text}` objects or `{segments, summary?, action_items?}`. Numeric timestamps are seconds; string timestamps may be seconds or `MM:SS[.mmm]` / `HH:MM:SS[.mmm]`. Missing speaker becomes Unknown speaker; missing end uses the next start/duration. Segments are sorted chronologically; overlaps, empty text, nonfinite/negative timestamps, and ranges beyond duration are rejected.
+
+Speaker labels are stored separately from shared participant names, preserving their supplied spelling. Unmatched labels get imported identities with generated `@transcript.invalid` placeholder emails; these are not real contact addresses. Unlabeled text is never attributed to the first participant. Import warnings describe estimated/inferred timing and placeholder identities.
+
+Optional `summary` accepts `{overview, notes?}`; optional `action_items` accepts `{text, assignee?, status?, due_date?}` objects. An assignee must match a participant label or email; omitted assignees remain unassigned. Explicit top-level summary/tasks override those embedded in a JSON transcript. A successful import returns `{meeting, segment_count, warnings}`. Parser errors return 422 with a transcript-specific location/message; metadata uses standard Pydantic validation. Every write commits in one transaction.
+
+```json
+{
+  "title": "Product planning",
+  "started_at": "2026-10-08T10:30:00+05:30",
+  "duration_seconds": 60,
+  "participants": [{"name": "Priya", "email": "priya@example.com"}],
+  "transcript": {
+    "format": "json",
+    "filename": "planning.json",
+    "content": "[{\"speaker\":\"Priya\",\"start_seconds\":0.5,\"end_seconds\":30.75,\"text\":\"Ship the plan.\"}]"
+  },
+  "summary": {"overview": "The plan was approved."},
+  "action_items": [{"text": "Ship the plan", "assignee": "Priya", "status": "open"}]
+}
+```
+
+Run `scripts/init-db.ps1` on existing checkouts to apply the fractional timestamp/provenance migration. It preserves stored meetings, transcript constraints, membership foreign keys, and indexes. Downgrading that revision loses fractional precision and import provenance; use disposable databases for downgrade tests. Creation browser tests use `scripts/test-e2e.ps1` with isolated SQLite and clean up their own meetings.
+
 The library follows the icon rail, channel sidebar, purple active states, date-grouped cards, and compact search/filter controls shown in [Fireflies' official Meetings guide](https://guide.fireflies.ai/articles/4827382971-learn-about-fireflies-notebook). No user-attached screenshot was available in the implementation turn, and browser automation could not open the logged-in session; official current product screenshots supplied the visual reference.
 
 - `components/workspace/`: reusable navigation, header, and toast provider.
 - `components/meetings/`: library composition, filters, cards, skeletons, empty/error states.
 - `hooks/use-meetings.ts`: debouncing, request cancellation, stale-response protection, retries.
 - `lib/meetings.ts`: API query construction, local-date boundaries, formatting, error messages.
-- Cards come entirely from FastAPI. Filtering and pagination run in the backend, with 12 results per page. Search supports title or participant; advanced filters support participant AND local-calendar date ranges. No frontend fixture cards are rendered.
+- Cards come entirely from FastAPI. Filtering and pagination run in the backend, with 12 results per page. Search supports title or participant; advanced filters support title AND participant AND local-calendar date ranges. Enable transcript content in Filters for highlighted snippets linking to `/meetings/[id]?tab=transcript&segment=ID&q=QUERY`. No frontend fixture cards are rendered.
 - The default-user workspace has no ownership/sharing model, so My Meetings and All Meetings show the same accessible records. Integrations, custom channels, profiles/settings, and voice-agent controls show explicit placeholder toasts.
 - Meeting links navigate to `/meetings/{id}`, which displays a real Overview with summary, saved discussion points, chapters, and action-item previews.
 
@@ -176,4 +210,10 @@ npx playwright install chromium
 
 Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. Read tests leave saved records untouched; action CRUD tests require an isolated database and clean up their own records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
 
-Audio recordings, upload parsing, and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
+Audio recordings and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
+
+### Meeting management
+
+Dashboard cards and detail headers expose actual PATCH editing and confirmed DELETE operations. Edit title, add participants, and remove unreferenced participants. Existing shared contact identities are read-only; removing a transcript speaker or task assignee is blocked by both UI and API. Successful edits update the detail snapshot without resetting playback or tabs; library writes, focus, visibility, and back navigation trigger fresh API reads. Deletion removes meeting-owned rows while keeping reusable contacts. Native dialogs trap focus, support Escape, restore focus, and block dismissal during writes. Server errors keep drafts open and never emit success feedback.
+
+Management browser tests run only against the disposable migrated SQLite database via `scripts/test-e2e.ps1`; they cover edits, participant membership, delete confirmation, persistence, combined filters, global transcript navigation, failed requests, focus trapping, and responsive dialogs.

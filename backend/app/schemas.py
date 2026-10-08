@@ -86,8 +86,16 @@ class MeetingRead(Schema):
         return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
+class TranscriptSearchMatch(Schema):
+    segment_id: int
+    start_seconds: float
+    speaker_label: str
+    snippet: str
+
+
 class MeetingListItem(MeetingRead):
     preview: str | None = None
+    match: TranscriptSearchMatch | None = None
 
 
 class MeetingPage(Schema):

@@ -42,7 +42,7 @@ test("live data, title/participant search, date filters, sorting, and navigation
   await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
-test("empty search, reset, settings toast, and keyboard shortcut", async ({ page }) => {
+test("empty search, reset, settings navigation, and keyboard shortcut", async ({ page }) => {
   await page.goto("/meetings");
   await expect(page.getByTestId("meeting-card").first()).toBeVisible();
   await page.keyboard.press("Control+k");
@@ -52,8 +52,9 @@ test("empty search, reset, settings toast, and keyboard shortcut", async ({ page
   await expect(page.getByRole("heading", { name: "No matching meetings" })).toBeVisible();
   await page.getByRole("button", { name: "Clear search and filters" }).click();
   await expect(page.getByTestId("meeting-card").first()).toBeVisible();
-  await page.getByRole("button", { name: "Workspace settings", exact: true }).click();
-  await expect(page.getByText("Workspace settings are coming soon.", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Workspace settings", exact: true }).click();
+  await expect(page).toHaveURL("/settings");
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
 });
 
 test("loading skeletons and recovery after backend failure", async ({ page }) => {

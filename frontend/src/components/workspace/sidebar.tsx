@@ -44,8 +44,8 @@ export function Sidebar({ channel, onChannelChange, mobileOpen, onClose, disable
       <div className="channel-sidebar">
         <div className="channel-heading"><span className="channel-workspace">Northstar <ChevronDown size={14} /></span><button className="icon-button mobile-close" onClick={onClose} aria-label="Close sidebar"><X size={18} /></button></div>
         <nav className="channel-links" aria-label="Meeting channels">
-          <button className={cn("channel-button", channel === "my" && "active")} aria-current={channel === "my" ? "page" : undefined} onClick={() => selectChannel("my")}><Hash size={19} /> My Meetings</button>
-          <button className={cn("channel-button", channel === "all" && "active")} aria-current={channel === "all" ? "page" : undefined} onClick={() => selectChannel("all")}><Users size={19} /> All Meetings</button>
+          <button className={cn("channel-button", pathname.startsWith("/meetings") && channel === "my" && "active")} aria-current={pathname.startsWith("/meetings") && channel === "my" ? "page" : undefined} onClick={() => selectChannel("my")}><Hash size={19} /> My Meetings</button>
+          <button className={cn("channel-button", pathname.startsWith("/meetings") && channel === "all" && "active")} aria-current={pathname.startsWith("/meetings") && channel === "all" ? "page" : undefined} onClick={() => selectChannel("all")}><Users size={19} /> All Meetings</button>
           <button className="channel-button" disabled={disabledPlaceholders} title="Voice Agent Meetings — coming soon" onClick={() => comingSoon("Voice Agent Meetings")}><Bot size={19} /> Voice Agent Meetings</button>
           <button className="channel-button" disabled={disabledPlaceholders} title="Uploads — coming soon" onClick={() => comingSoon("Uploads")}><Upload size={19} /> Uploads</button>
         </nav>

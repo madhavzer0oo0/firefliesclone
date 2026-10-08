@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 from .database import get_db
 from . import models as m, schemas as s
@@ -40,7 +40,8 @@ def resolve_participants(db: Session, participants: list[s.ParticipantInput]):
 def list_meetings(
     db: DB,
     q: str | None = Query(default=None, max_length=200),
-    search_scope: Literal['all', 'library'] = 'all',
+    search_scope: Literal['all', 'library', 'everywhere'] = 'all',
+    title: str | None = Query(default=None, max_length=200),
     participant: str | None = Query(default=None, max_length=254),
     status: s.MeetingStatus | None = None,
     date_from: datetime | None = None,
@@ -66,8 +67,14 @@ def list_meetings(
             m.Participant.name.icontains(q, autoescape=True),
             m.Participant.email.icontains(q, autoescape=True),
         ))
-        stmt = stmt.where(or_(m.Meeting.title.icontains(q, autoescape=True),
-                             participant_match if search_scope == 'library' else transcript_match))
+        matches = [m.Meeting.title.icontains(q, autoescape=True)]
+        if search_scope in ('library', 'everywhere'):
+            matches.append(participant_match)
+        if search_scope in ('all', 'everywhere'):
+            matches.append(transcript_match)
+        stmt = stmt.where(or_(*matches))
+    if title:
+        stmt = stmt.where(m.Meeting.title.icontains(title, autoescape=True))
     if participant:
         stmt = stmt.where(m.Meeting.participants.any(or_(
             m.Participant.name.icontains(participant, autoescape=True),
@@ -89,8 +96,27 @@ def list_meetings(
     previews = dict(db.execute(select(m.Summary.meeting_id, m.Summary.overview).where(
         m.Summary.meeting_id.in_([meeting.id for meeting in meetings])
     )).all()) if meetings else {}
+    snippets = {}
+    if q and search_scope in ('all', 'everywhere') and meetings:
+        import re
+        first_matches = select(m.TranscriptSegment.meeting_id, func.min(m.TranscriptSegment.position).label('position')).where(
+            m.TranscriptSegment.meeting_id.in_([meeting.id for meeting in meetings]),
+            m.TranscriptSegment.text.icontains(q, autoescape=True),
+        ).group_by(m.TranscriptSegment.meeting_id).subquery()
+        segments = db.scalars(select(m.TranscriptSegment).join(first_matches, and_(
+            m.TranscriptSegment.meeting_id == first_matches.c.meeting_id,
+            m.TranscriptSegment.position == first_matches.c.position,
+        ))).all()
+        for segment in segments:
+            found = re.search(re.escape(q), segment.text, re.IGNORECASE)
+            index = found.start() if found else 0
+            left = max(0, index - 70)
+            right = min(len(segment.text), index + len(q) + 130)
+            snippet = ('…' if left else '') + segment.text[left:right] + ('…' if right < len(segment.text) else '')
+            snippets[segment.meeting_id] = s.TranscriptSearchMatch(segment_id=segment.id, start_seconds=segment.start_seconds,
+                speaker_label=segment.speaker_label or segment.speaker.name, snippet=snippet)
     items = [s.MeetingListItem(**s.MeetingRead.model_validate(meeting).model_dump(),
-                               preview=previews.get(meeting.id)) for meeting in meetings]
+                               preview=previews.get(meeting.id), match=snippets.get(meeting.id)) for meeting in meetings]
     return s.MeetingPage(items=items, total=total, limit=limit, offset=offset)
 
 

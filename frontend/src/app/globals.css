@@ -2,6 +2,8 @@
 @import "./meeting-detail.css";
 @import "./transcript.css";
 @import "./action-items.css";
+@import "./create-meeting.css";
+@import "./meeting-management.css";
 
 :root {
   --background: #ffffff;

@@ -8,6 +8,8 @@ export interface LibraryFilters {
   dateTo: string;
   order: "asc" | "desc";
   page: number;
+  title?: string;
+  includeTranscript?: boolean;
 }
 export const PAGE_SIZE = 12;
 
@@ -23,7 +25,8 @@ export function dateBoundary(value: string, end = false): string | undefined {
 export async function fetchLibrary(filters: LibraryFilters, signal: AbortSignal): Promise<MeetingPage> {
   return api.listMeetings({
     q: filters.search.trim() || undefined,
-    search_scope: "library",
+    search_scope: filters.includeTranscript ? "everywhere" : "library",
+    title: filters.title?.trim() || undefined,
     participant: filters.participant.trim() || undefined,
     date_from: dateBoundary(filters.dateFrom),
     date_to: dateBoundary(filters.dateTo, true),

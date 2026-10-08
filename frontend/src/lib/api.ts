@@ -1,6 +1,6 @@
 import type {
   ActionCreate, ActionItem, ActionStatus, ActionUpdate, Chapter, ChapterInput,
-  Meeting, MeetingCreate, MeetingPage, MeetingQuery, MeetingUpdate,
+  Meeting, MeetingCreate, MeetingImport, MeetingImportResult, MeetingPage, MeetingQuery, MeetingUpdate,
   SegmentInput, Summary, SummaryInput, TranscriptSegment,
 } from "@/types/api";
 
@@ -42,6 +42,7 @@ export const api = {
   listMeetings: (query?: MeetingQuery, signal?: AbortSignal) => request<MeetingPage>(`/meetings${queryString(query)}`, { signal }),
   getMeeting: (id: number, signal?: AbortSignal) => request<Meeting>(meetingPath(id), { signal }),
   createMeeting: (data: MeetingCreate) => request<Meeting>("/meetings", json("POST", data)),
+  importMeeting: (data: MeetingImport) => request<MeetingImportResult>("/meetings/import", json("POST", data)),
   updateMeeting: (id: number, data: MeetingUpdate) => request<Meeting>(meetingPath(id), json("PATCH", data)),
   deleteMeeting: (id: number) => request<void>(meetingPath(id), { method: "DELETE" }),
   getTranscript: (id: number, q?: string, signal?: AbortSignal) => request<TranscriptSegment[]>(`${meetingPath(id)}/transcript${queryString({ q })}`, { signal }),

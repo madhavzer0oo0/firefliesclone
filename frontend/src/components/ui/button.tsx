@@ -23,7 +23,7 @@ type ButtonProps = React.ComponentProps<"button"> &
 
 function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
   const Component = asChild ? Slot : "button";
-  return <Component data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  return <Component data-slot="button" data-variant={variant ?? "default"} className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
 
 export { Button, buttonVariants };

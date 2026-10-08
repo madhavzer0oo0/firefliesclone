@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Clock3, Link2, Menu, RefreshCw, Share2, Users, Video } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, Link2, Menu, Pencil, Trash2, RefreshCw, Share2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration, initials } from "@/lib/meetings";
 import type { Meeting } from "@/types/api";
 import { speakerColor } from "@/lib/playback";
 
-interface HeaderProps { meeting: Meeting | null; loading: boolean; busy?: boolean; onMenuClick: () => void; onRefresh: () => void }
+interface HeaderProps { meeting: Meeting | null; loading: boolean; busy?: boolean; onMenuClick: () => void; onRefresh: () => void; onEdit: () => void; onDelete: () => void }
 
-export function MeetingDetailHeader({ meeting, loading, busy = false, onMenuClick, onRefresh }: HeaderProps) {
+export function MeetingDetailHeader({ meeting, loading, busy = false, onMenuClick, onRefresh, onEdit, onDelete }: HeaderProps) {
   async function copyLink() {
     try { await navigator.clipboard.writeText(window.location.href); toast.success("Meeting link copied to clipboard."); }
     catch { toast.error("Couldn’t copy the link. Please try again."); }
@@ -21,7 +21,7 @@ export function MeetingDetailHeader({ meeting, loading, busy = false, onMenuClic
     </header>
     <div className="detail-meeting-heading">
       {meeting ? <>
-        <div className="detail-title-row"><h1>{meeting.title}</h1><span className={`detail-status ${meeting.status}`}>{meeting.status}</span></div>
+        <div className="detail-title-row"><h1>{meeting.title}</h1><span className={`detail-status ${meeting.status}`}>{meeting.status}</span><div className="detail-meeting-management"><button className="control-button" disabled={loading || busy} onClick={onEdit}><Pencil size={14} />Edit meeting</button><button className="icon-button" aria-label="Delete meeting" disabled={loading || busy} onClick={onDelete}><Trash2 size={16} /></button></div></div>
         <div className="detail-metadata"><span><CalendarDays size={14} /><time dateTime={meeting.started_at}>{new Date(meeting.started_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></span><span><Clock3 size={14} />{formatDuration(meeting.duration_seconds)}</span><span><Video size={14} />{meeting.source}</span></div>
         <details className="detail-attendees"><summary><span className="detail-attendee-avatars" aria-hidden="true">{meeting.participants.slice(0, 4).map(person => <span key={person.id} style={{ background: speakerColor(person.id) }}>{initials(person.name)}</span>)}</span><Users size={14} /><span>{meeting.participants.length} {meeting.participants.length === 1 ? "participant" : "participants"}</span><span className="attendee-names">{meeting.participants.map(person => person.name).join(", ")}</span></summary><div className="detail-attendee-list">{meeting.participants.length ? meeting.participants.map(person => <div key={person.id}><span className="detail-person-avatar" style={{ background: speakerColor(person.id), color: "white" }}>{initials(person.name)}</span><div><strong>{person.name}</strong><span>{person.email}</span></div></div>) : <p>No participants have been added to this meeting.</p>}</div></details>
       </> : loading ? <div className="detail-heading-skeleton" aria-label="Loading meeting metadata"><div className="skeleton" /><div className="skeleton" /></div> : <h1>Meeting overview</h1>}

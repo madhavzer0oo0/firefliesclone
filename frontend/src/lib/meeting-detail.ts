@@ -40,10 +40,13 @@ export function discussionPoints(notes: string): string[] {
 }
 
 export function formatTimestamp(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remaining = seconds % 60;
-  return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+  const milliseconds = Math.round(seconds * 1000);
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remaining = totalSeconds % 60;
+  const fraction = milliseconds % 1000;
+  return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}${fraction ? `.${String(fraction).padStart(3, "0")}` : ""}`;
 }
 
 export function summaryText(data: MeetingDetailData): string {

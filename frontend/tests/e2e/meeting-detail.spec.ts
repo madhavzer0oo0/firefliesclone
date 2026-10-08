@@ -22,7 +22,7 @@ test("direct detail navigation, full saved content, refresh, participants, and c
   await expect(page.getByRole("tab", { name: /^Transcript/ })).toBeEnabled();
   await expect(page.getByRole("tab", { name: /^Action Items/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /^Share/ })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /^Edit/ })).toBeDisabled();
+  await expect(page.locator(".general-summary-toolbar").getByRole("button", { name: /^Edit/ })).toBeDisabled();
   await page.getByRole("button", { name: "Copy summary", exact: true }).click();
   await expect(page.getByText("Meeting summary copied to clipboard.", { exact: true })).toBeVisible();
   // The native Windows clipboard normalizes LF to CRLF; compare the saved content.

@@ -45,6 +45,7 @@ class MeetingParticipant(Base):
 class TranscriptSegment(Base):
     __tablename__ = 'transcript_segments'
     __table_args__ = (
+        CheckConstraint("timing_source IN ('provided', 'inferred_end', 'estimated')"),
         ForeignKeyConstraint(['meeting_id', 'speaker_id'], ['meeting_participants.meeting_id', 'meeting_participants.participant_id'], ondelete='CASCADE'),
         UniqueConstraint('meeting_id', 'position'),
         CheckConstraint('position >= 0'),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchLibrary, libraryError, type LibraryFilters } from "@/lib/meetings";
 import type { MeetingPage } from "@/types/api";
+import { MEETINGS_CHANGED } from "@/lib/meeting-management";
 
 export function useDebouncedValue<T>(value: T, delay = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -20,6 +21,20 @@ export function useMeetings(filters: LibraryFilters) {
   const [revision, setRevision] = useState(0);
   const key = JSON.stringify({ ...filters, revision });
   const invalidDates = Boolean(filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo);
+  useEffect(() => {
+    const refresh = () => setRevision(value => value + 1);
+    const visible = () => { if (!document.hidden) refresh(); };
+    window.addEventListener(MEETINGS_CHANGED, refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.removeEventListener(MEETINGS_CHANGED, refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, []);
 
   useEffect(() => {
     if (invalidDates) return;

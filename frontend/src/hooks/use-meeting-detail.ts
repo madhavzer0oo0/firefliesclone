@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { fetchMeetingDetail, type MeetingDetailData } from "@/lib/meeting-detail";
-import type { ActionItem } from "@/types/api";
+import type { ActionItem, Meeting } from "@/types/api";
 
 type Result = { key: string; data: MeetingDetailData | null; error: string | null; missing: boolean };
 
@@ -35,5 +35,8 @@ export function useMeetingDetail(id: number) {
       return { ...previous, data: { ...previous.data, actions: { data: items, error: null } } };
     });
   }, [id]);
-  return { data: current ? current.data : previousData, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1), saveActionItem };
+  const saveMeeting = useCallback((meeting: Meeting) => {
+    setResult(previous => previous?.data && previous.data.meeting.id === meeting.id ? { ...previous, data: { ...previous.data, meeting } } : previous);
+  }, []);
+  return { data: current ? current.data : previousData, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1), saveActionItem, saveMeeting };
 }
