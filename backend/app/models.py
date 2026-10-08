@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, Float, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -55,8 +55,10 @@ class TranscriptSegment(Base):
     meeting_id: Mapped[int] = mapped_column(ForeignKey('meetings.id', ondelete='CASCADE'))
     speaker_id: Mapped[int] = mapped_column(Integer)
     position: Mapped[int] = mapped_column(Integer)
-    start_seconds: Mapped[int] = mapped_column(Integer)
-    end_seconds: Mapped[int] = mapped_column(Integer)
+    start_seconds: Mapped[float] = mapped_column(Float)
+    end_seconds: Mapped[float] = mapped_column(Float)
+    speaker_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    timing_source: Mapped[str] = mapped_column(String(20), default='provided', server_default='provided')
     text: Mapped[str] = mapped_column(Text)
     speaker: Mapped[Participant] = relationship(primaryjoin='foreign(TranscriptSegment.speaker_id) == Participant.id', viewonly=True, lazy='joined')
 

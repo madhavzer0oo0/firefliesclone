@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from .database import get_db
 from . import models as m, schemas as s
+from .transcript_import import ImportProblem, parse_transcript
 
 router = APIRouter(prefix='/api/v1')
 DB = Annotated[Session, Depends(get_db)]
@@ -100,6 +101,53 @@ def create_meeting(payload: s.MeetingCreate, db: DB):
     db.add(meeting)
     db.commit()
     return meeting
+
+
+@router.post('/meetings/import', response_model=s.MeetingImportResult, status_code=201)
+def import_meeting(payload: s.MeetingImport, db: DB):
+    from uuid import uuid4
+    try:
+        segments, parsed_summary, parsed_actions, warnings = parse_transcript(payload.transcript, payload.duration_seconds)
+    except ImportProblem as error:
+        raise HTTPException(422, detail=[{'loc': ['body', 'transcript', 'content'], 'msg': str(error), 'type': 'transcript_parse_error'}]) from error
+    summary = payload.summary if payload.summary is not None else parsed_summary
+    actions = payload.action_items if payload.action_items is not None else parsed_actions or []
+    participants = list(payload.participants)
+    by_label = {person.name.casefold(): person for person in participants}
+    by_email = {person.email: person for person in participants}
+    # Preserve labels that are not known people without inventing real email addresses.
+    for segment in segments:
+        key = segment.speaker.casefold()
+        if key not in by_label:
+            person = s.ParticipantInput(name=segment.speaker, email=f'speaker-{uuid4().hex}@transcript.invalid')
+            participants.append(person)
+            by_label[key] = person
+            warnings.append(f'Speaker label “{segment.speaker}” is stored as an imported identity with a placeholder email.')
+    if len(participants) > 100:
+        raise HTTPException(422, 'Participants and imported speaker labels must total at most 100')
+    assignees = []
+    for action in actions:
+        person = (by_label.get(action.assignee.casefold()) or by_email.get(action.assignee.lower())) if action.assignee else None
+        if action.assignee and person is None:
+            raise HTTPException(422, f'Action-item assignee “{action.assignee}” must match a meeting participant name or email')
+        assignees.append(person)
+    people = resolve_participants(db, participants)
+    by_import_email = dict(zip((person.email for person in participants), people))
+    meeting = m.Meeting(**payload.model_dump(exclude={'participants', 'transcript', 'summary', 'action_items'}))
+    meeting.participants = people
+    db.add(meeting)
+    db.flush()
+    db.add_all([m.TranscriptSegment(meeting_id=meeting.id, speaker_id=by_import_email[by_label[segment.speaker.casefold()].email].id,
+                                   speaker_label=segment.speaker, position=index, start_seconds=segment.start_seconds,
+                                   end_seconds=segment.end_seconds, text=segment.text, timing_source=segment.timing_source)
+                for index, segment in enumerate(segments)])
+    if summary:
+        db.add(m.Summary(meeting_id=meeting.id, **summary.model_dump()))
+    for action, assignee in zip(actions, assignees):
+        db.add(m.ActionItem(meeting_id=meeting.id, **action.model_dump(exclude={'assignee'}),
+                            assignee_id=by_import_email[assignee.email].id if assignee else None))
+    db.commit()
+    return s.MeetingImportResult(meeting=meeting, segment_count=len(segments), warnings=warnings)
 
 
 @router.get('/meetings/{meeting_id}', response_model=s.MeetingRead)

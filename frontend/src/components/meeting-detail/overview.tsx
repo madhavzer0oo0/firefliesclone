@@ -14,7 +14,7 @@ function SectionMessage({ message, error = false, onRetry }: { message: string; 
   return <div className={`detail-section-message ${error ? "is-error" : ""}`} role={error ? "alert" : undefined}><p>{message}</p>{error && <button onClick={onRetry}>Refresh overview</button>}</div>;
 }
 
-export function MeetingOverview({ data, onRefresh }: { data: MeetingDetailData; onRefresh: () => void }) {
+export function MeetingOverview({ data, onRefresh, onOpenActions }: { data: MeetingDetailData; onRefresh: () => void; onOpenActions: () => void }) {
   const { meeting, summary, chapters, actions } = data;
   const points = discussionPoints(summary.data?.notes ?? "");
   async function copySummary() {
@@ -30,7 +30,7 @@ export function MeetingOverview({ data, onRefresh }: { data: MeetingDetailData; 
       const assignee = meeting.participants.find(person => person.id === item.assignee_id);
       const completed = item.status === "completed";
       return <li key={item.id} className={completed ? "completed" : ""}>{completed ? <CheckCircle2 size={17} aria-label="Completed" /> : <Circle size={17} aria-label="Open" />}<div><p>{item.text}</p><div className="action-preview-meta">{assignee && <span className="action-assignee-avatar">{initials(assignee.name)}</span>}<span>{assignee?.name ?? "Unassigned"}</span>{item.due_date && <span>Due {new Date(`${item.due_date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}<span className="action-status-label">{completed ? "Completed" : "Open"}</span></div></div></li>;
-    })}</ul>{actions.data.length > 3 && <p className="remaining-actions">Showing 3 of {actions.data.length} saved action items.</p>}<p className="actions-coming-soon">Task editing and completion controls are coming soon.</p></> : <SectionMessage message="No action items yet. Follow-ups saved for this meeting will appear here." onRetry={onRefresh} />}</section>
+    })}</ul>{actions.data.length > 3 && <p className="remaining-actions">Showing 3 of {actions.data.length} saved action items.</p>}</> : <SectionMessage message="No action items yet. Follow-ups saved for this meeting will appear here." onRetry={onRefresh} />}<button className="detail-text-button manage-actions" onClick={onOpenActions}>Manage action items</button></section>
     <footer className="summary-footer"><Sparkles size={13} /><span>Meeting notes · Saved in your workspace</span></footer>
   </div>;
 }

@@ -1,0 +1,163 @@
+import { test, expect } from "@playwright/test";
+import type { ActionItem, MeetingPage } from "../../src/types/api";
+
+const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8000/api/v1";
+
+test("create, edit, complete, reopen, delete, persisted reload, and other meeting tabs", async ({ page, request }) => {
+  test.skip(process.env.PLAYWRIGHT_ISOLATED_DB !== "1", "CRUD requires scripts/test-e2e.ps1 and its disposable SQLite database.");
+  const meeting = ((await (await request.get(`${apiUrl}/meetings`)).json()) as MeetingPage).items[0];
+  const endpoint = `${apiUrl}/meetings/${meeting.id}/action-items`;
+  let createdId: number | undefined;
+  try {
+    await page.goto(`/meetings/${meeting.id}`);
+    await page.getByRole("tab", { name: "Transcript", exact: true }).click();
+    await page.getByTestId("transcript-segment").nth(2).click();
+    await page.getByRole("searchbox", { name: "Search transcript" }).fill("meeting");
+    await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+    await page.getByRole("button", { name: "Add action item", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Add action item", exact: true });
+    await expect(dialog.getByLabel("Description")).toBeFocused();
+    await dialog.getByRole("button", { name: "Add action item", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("Enter an action item description.");
+    await dialog.getByLabel("Description").fill("E2E follow-up for product planning");
+    await dialog.getByLabel("Assignee", { exact: true }).selectOption(String(meeting.participants[0].id));
+    await dialog.getByLabel("Due date").fill("2026-11-05");
+    const createdResponse = page.waitForResponse(response => response.url() === endpoint && response.request().method() === "POST" && response.status() === 201);
+    await dialog.getByRole("button", { name: "Add action item", exact: true }).click();
+    const created = (await (await createdResponse).json()) as ActionItem;
+    createdId = created.id;
+    const row = page.locator(`[data-testid="action-item"][data-item-id="${createdId}"]`);
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText("Action item added.", { exact: true })).toBeVisible();
+    await expect(row).toContainText(meeting.participants[0].name);
+    await expect(row).toContainText("Nov 5, 2026");
+    await row.getByRole("button", { name: /^Edit action item:/ }).click();
+    const edit = page.getByRole("dialog", { name: "Edit action item", exact: true });
+    await edit.getByLabel("Description").fill("E2E follow-up: revised plan");
+    await edit.getByLabel("Assignee", { exact: true }).selectOption("");
+    await edit.getByLabel("Due date").fill("");
+    await edit.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(row).toContainText("E2E follow-up: revised plan");
+    await expect(row).toContainText("Unassigned");
+    // The checkbox reflects persisted server state, so wait for the async PATCH after clicking.
+    await row.getByRole("checkbox").click();
+    await expect(row).toHaveAttribute("data-status", "completed");
+    await expect(page.getByRole("region", { name: "Completed action items", exact: true }).locator(row)).toBeVisible();
+    await expect(page.getByText("Action item completed.", { exact: true })).toBeVisible();
+    await row.getByRole("button", { name: /^Edit action item:/ }).click();
+    await edit.getByLabel("Description").fill("E2E follow-up: completed review");
+    await edit.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(row).toHaveAttribute("data-status", "completed");
+    await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    await expect(page.getByTestId("full-summary")).toBeVisible();
+    await expect(page.locator(".action-preview-list")).toContainText("E2E follow-up: completed review");
+    await page.getByRole("button", { name: "Manage action items", exact: true }).click();
+    await expect(row.getByRole("checkbox")).toBeChecked();
+    await page.getByRole("tab", { name: "Transcript", exact: true }).click();
+    await expect(page.getByRole("searchbox", { name: "Search transcript" })).toHaveValue("meeting");
+    await expect(page.getByTestId("playback-time")).toHaveAttribute("data-time", "30");
+    await page.reload();
+    await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+    await expect(row.getByRole("checkbox")).toBeChecked();
+    const persisted = (await (await request.get(`${endpoint}/${createdId}`)).json()) as ActionItem;
+    expect(persisted).toMatchObject({ text: "E2E follow-up: completed review", status: "completed", assignee_id: null, due_date: null });
+    await row.getByRole("checkbox").click();
+    await expect(row).toHaveAttribute("data-status", "open");
+    await expect(row.getByRole("checkbox")).not.toBeChecked();
+    await page.reload();
+    await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+    await expect(row.getByRole("checkbox")).not.toBeChecked();
+    await row.getByRole("button", { name: /^Delete action item:/ }).click();
+    await page.getByRole("dialog", { name: "Delete action item?", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: /^Delete action item:/ }).click();
+    await page.getByRole("dialog", { name: "Delete action item?", exact: true }).getByRole("button", { name: "Delete action item", exact: true }).click();
+    await expect(row).toHaveCount(0);
+    await expect(page.getByText("Action item deleted.", { exact: true })).toBeVisible();
+    expect((await request.get(`${endpoint}/${createdId}`)).status()).toBe(404);
+    await page.reload();
+    await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+    await expect(row).toHaveCount(0);
+  } finally {
+    if (createdId) await request.delete(`${endpoint}/${createdId}`);
+  }
+});
+
+test("action loading, isolated read error, retry, empty state, modal keyboard, and write failure", async ({ page, request }) => {
+  const meeting = ((await (await request.get(`${apiUrl}/meetings`)).json()) as MeetingPage).items[0];
+  const endpoint = `**/api/v1/meetings/${meeting.id}/action-items`;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(endpoint, async route => { await gate; await route.fulfill({ status: 500, json: { detail: "Unavailable" } }); });
+  await page.goto(`/meetings/${meeting.id}`);
+  await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Loading action items" })).toBeVisible();
+  release();
+  await expect(page.getByRole("heading", { name: "Action items unavailable", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add action item", exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await expect(page.getByTestId("full-summary")).toBeVisible();
+  await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+  await page.unroute(endpoint);
+  await page.getByRole("button", { name: "Retry action items", exact: true }).click();
+  await expect(page.getByTestId("action-item").first()).toBeVisible();
+  await page.route(endpoint, route => route.fulfill({ json: [] }));
+  await page.getByRole("button", { name: "Refresh meeting", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No action items yet", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create your first action item", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create your first action item", exact: true })).toBeFocused();
+  await page.unroute(endpoint);
+  await page.route(endpoint, route => route.request().method() === "POST" ? route.fulfill({ status: 500, json: { detail: "Write failed" } }) : route.continue());
+  await page.getByRole("button", { name: "Add action item", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add action item", exact: true });
+  await dialog.getByLabel("Description").fill("Keep this draft after failure");
+  await dialog.getByRole("button", { name: "Add action item", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Couldn’t save the action item");
+  await expect(dialog.getByLabel("Description")).toHaveValue("Keep this draft after failure");
+  await expect(page.getByTestId("action-item")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+});
+
+test("failed completion and deletion preserve saved rows", async ({ page, request }) => {
+  const meeting = ((await (await request.get(`${apiUrl}/meetings`)).json()) as MeetingPage).items[0];
+  await page.goto(`/meetings/${meeting.id}`);
+  await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+  const row = page.getByTestId("action-item").first();
+  await expect(row).toBeVisible();
+  const id = await row.getAttribute("data-item-id");
+  const initial = await row.getAttribute("data-status");
+  await page.route(`**/api/v1/meetings/${meeting.id}/action-items/${id}`, route => route.fulfill({ status: 500, json: { detail: "Write failed" } }));
+  await row.getByRole("checkbox").click();
+  await expect(page.getByRole("tabpanel", { name: "Action Items", exact: true }).getByRole("alert")).toContainText("Couldn’t save the action item");
+  await expect(row).toHaveAttribute("data-status", initial!);
+  await row.getByRole("button", { name: /^Delete action item:/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete action item?", exact: true });
+  await dialog.getByRole("button", { name: "Delete action item", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Couldn’t save the action item");
+  await expect(row).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+});
+
+for (const width of [375, 768, 1440]) {
+  test(`action items and editor at ${width}px`, async ({ page, request }) => {
+    const meeting = ((await (await request.get(`${apiUrl}/meetings`)).json()) as MeetingPage).items[0];
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(`/meetings/${meeting.id}`);
+    await page.getByRole("tab", { name: "Action Items", exact: true }).click();
+    await expect(page.getByTestId("action-item").first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({ path: `test-results/actions-${width}.png`, fullPage: true });
+    await page.getByRole("button", { name: "Add action item", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Add action item", exact: true });
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+    await page.screenshot({ path: `test-results/action-editor-${width}.png` });
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Add action item", exact: true })).toBeFocused();
+    await page.getByRole("tab", { name: "Action Items", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
+  });
+}

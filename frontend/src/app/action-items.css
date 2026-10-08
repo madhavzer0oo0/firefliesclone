@@ -1,0 +1,60 @@
+.detail-panels.actions-focused { grid-template-columns: minmax(0, 1fr); }
+.action-items-panel { width: 100%; max-width: 1100px; margin: 0 auto; padding: 30px 40px 48px; min-width: 0; }
+.action-items-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.action-items-toolbar h2 { display: flex; align-items: center; gap: 9px; color: #7446d4; font-size: 16px; font-weight: 500; }
+.action-items-toolbar p { color: #8590a4; font-size: 12px; margin-top: 8px; }
+.action-items-toolbar [data-slot=button] { font-size: 12px; background: #8150df; }
+.action-progress { display: flex; gap: 20px; color: #8d82a1; font-size: 11px; padding: 23px 0; margin: 7px 0 16px; border-bottom: 1px solid #ecebf3; }
+.action-progress > span { display: flex; align-items: center; gap: 6px; }
+.action-group + .action-group { margin-top: 35px; }
+.action-group h3 { display: flex; align-items: center; gap: 8px; color: #65728a; font-size: 13px; font-weight: 500; margin-bottom: 14px; }
+.action-group h3 svg { color: #a08aba; }
+.action-group h3 span { font-size: 10px; padding: 2px 6px; background: #f4f1fa; border-radius: 4px; color: #9b8aad; }
+.action-items-list { list-style: none; padding: 0; }
+.action-item-row { display: flex; align-items: flex-start; gap: 13px; padding: 19px 15px; border: 1px solid #edeaf4; border-radius: 7px; margin-bottom: 9px; background: #fff; }
+.action-item-row:hover { background: #fdfbff; }
+.action-checkbox { appearance: none; width: 17px; height: 17px; flex-shrink: 0; margin-top: 3px; border: 1px solid #c8bfd9; border-radius: 4px; cursor: pointer; }
+.action-checkbox:checked { background: #8b63ce; border-color: #8b63ce; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 8 3 3 5-6' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.action-checkbox:disabled { opacity: .5; cursor: wait; }
+.action-item-content { flex: 1; min-width: 0; }
+.action-item-description { color: #637189; line-height: 1.85; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.action-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #9298aa; font-size: 10px; margin-top: 11px; }
+.action-person { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: #fff; font-size: 8px; }
+.action-item-meta time { margin-left: 8px; }
+.action-item-status { display: inline-flex; align-items: center; gap: 4px; margin-left: 7px; padding: 3px 6px; background: #f7f3fc; border-radius: 4px; color: #9b81bc; }
+.action-item-status.done { background: #eff7f2; color: #6a9b84; }
+.action-item-row.is-completed { background: #fafbfc; }
+.is-completed .action-item-description { text-decoration: line-through; text-decoration-color: #bfc3cd; color: #9a9fb0; }
+.action-item-controls { display: flex; gap: 3px; color: #a9a0ba; }
+.action-group-empty { font-size: 12px; color: #a0a6b7; padding: 15px; border: 1px dashed #e6e2ed; border-radius: 7px; }
+.action-items-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 65px 20px; color: #a38bbd; }
+.action-items-empty h3 { color: #747f95; font-size: 16px; font-weight: 500; }
+.action-items-empty p { font-size: 12px; color: #939aae; line-height: 1.8; }
+.action-items-loading { display: grid; gap: 18px; }
+.action-items-loading > div { padding: 20px; border: 1px solid #f0edf5; border-radius: 7px; }
+.action-items-loading .skeleton { height: 13px; width: 85%; }
+.action-items-loading .skeleton + .skeleton { width: 35%; margin-top: 17px; height: 10px; }
+.action-saving { color: #9378b7; font-size: 11px; margin-top: 15px; }
+.action-operation-error { padding: 15px; background: #fff5f6; border: 1px solid #f1d8df; border-radius: 6px; margin-bottom: 20px; color: #aa6176; font-size: 12px; }
+.action-operation-error button { margin-top: 10px; }
+.manage-actions { color: #8b62cd; margin-top: 14px; font-size: 11px; }
+.app-modal { position: fixed; inset: 0; margin: auto; width: min(510px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 24px; border: 1px solid #eee9f5; border-radius: 12px; background: #fff; color: #67748c; box-shadow: 0 20px 70px #29203930; }
+.app-modal::backdrop { background: #26203c55; }
+.app-modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.app-modal-heading h2 { color: #554368; font-weight: 500; font-size: 17px; }
+.action-editor-hint { margin: 9px 0 23px; font-size: 12px; color: #9990aa; }
+.action-editor fieldset { border: 0; padding: 0; min-width: 0; }
+.action-editor label { display: block; font-size: 12px; margin: 0 0 8px; color: #7c738e; }
+.action-editor label span { font-size: 10px; color: #a79bb6; }
+.action-editor textarea, .action-editor select, .action-editor input { display: block; width: 100%; min-width: 0; border: 1px solid #e3ddeb; border-radius: 6px; background: #fff; color: #657188; font-size: 13px; padding: 10px 12px; }
+.action-editor textarea { resize: vertical; min-height: 110px; max-height: 45dvh; font-family: inherit; line-height: 1.8; }
+.action-editor textarea::placeholder { color: #b1a7bf; }
+.action-editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+.app-modal-footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 25px; }
+.app-modal-footer [data-slot=button] { font-size: 12px; }
+.app-modal .action-delete-confirm { background: #bf627c; }
+.action-delete-body > p { font-size: 13px; line-height: 1.8; margin-top: 15px; }
+.action-delete-body blockquote { margin-top: 15px; border-left: 3px solid #dacbea; padding: 10px 14px; background: #faf7fd; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30dvh; overflow: auto; }
+.action-form-error { color: #ad5e74; background: #fff4f6; border-radius: 5px; padding: 10px; font-size: 12px; line-height: 1.7; margin-top: 15px; }
+@media (max-width: 850px) { .action-items-panel { padding: 25px; } }
+@media (max-width: 600px) { .action-items-panel { padding: 22px 15px 35px; } .action-items-toolbar { flex-wrap: wrap; gap: 14px; } .action-item-row { padding: 15px 11px; gap: 10px; flex-wrap: wrap; } .action-item-controls { width: 100%; justify-content: flex-end; } .action-item-description { font-size: 12px; } .action-editor-fields { grid-template-columns: 1fr; } .app-modal { padding: 20px; } }

@@ -68,7 +68,7 @@ def test_summary_chapters(client, meeting):
     assert client.put(f'{path}/chapters', json=[]).json() == []
 
 
-def test_action_crud_cross_meeting_validation(client, meeting):
+def test_action_crud_cross_meeting_validation(client, meeting, database):
     path = f'{BASE}/{meeting["id"]}/action-items'
     assert client.post(path, json={'text': 'Ship search', 'assignee_id': 999}).status_code == 422
     item = client.post(path, json={'text': 'Ship search', 'assignee_id': meeting['participants'][0]['id'], 'due_date': '2026-10-09'}).json()
@@ -78,14 +78,27 @@ def test_action_crud_cross_meeting_validation(client, meeting):
     assert response.status_code == 200
     assert response.json()['assignee_id'] is None
     assert client.get(item_path).json()['status'] == 'completed'
+    # A new database session observes committed completion, independent of HTTP/UI state.
+    with database[1]() as db:
+        assert db.get(m.ActionItem, item['id']).status == 'completed'
     assert len(client.get(path, params={'status': 'completed'}).json()) == 1
     assert client.get(path, params={'status': 'open'}).json() == []
+    edited = client.patch(item_path, json={'text': 'Ship and document search'}).json()
+    assert edited['text'] == 'Ship and document search'
+    assert edited['status'] == 'completed'
+    assert client.patch(item_path, json={'status': 'open'}).json()['status'] == 'open'
+    with database[1]() as db:
+        persisted = db.get(m.ActionItem, item['id'])
+        assert persisted.text == 'Ship and document search'
+        assert persisted.status == 'open'
     assert client.patch(item_path, json={'text': None}).status_code == 422
     other = client.post(BASE, json={'title': 'Other', 'started_at': '2026-10-02T00:00:00Z'}).json()
     assert client.get(f'{BASE}/{other["id"]}/action-items/{item["id"]}').status_code == 404
     assert client.post(f'{BASE}/{other["id"]}/action-items', json={'text': 'Wrong assignee', 'assignee_id': meeting['participants'][0]['id']}).status_code == 422
     assert client.delete(item_path).status_code == 204
     assert client.get(item_path).status_code == 404
+    with database[1]() as db:
+        assert db.get(m.ActionItem, item['id']) is None
 
 
 def test_search_filter_sort_and_pagination(client, meeting):

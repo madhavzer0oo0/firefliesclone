@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { fetchMeetingDetail, type MeetingDetailData } from "@/lib/meeting-detail";
+import type { ActionItem } from "@/types/api";
 
 type Result = { key: string; data: MeetingDetailData | null; error: string | null; missing: boolean };
 
@@ -25,5 +26,14 @@ export function useMeetingDetail(id: number) {
 
   const current = result?.key === key ? result : null;
   const previousData = result?.key.startsWith(`${id}:`) ? result.data : null;
-  return { data: current ? current.data : previousData, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1) };
+  const saveActionItem = useCallback((item: ActionItem | null, deletedId?: number) => {
+    setResult(previous => {
+      if (!previous?.data || previous.data.meeting.id !== id) return previous;
+      const items = (previous.data.actions.data ?? []).filter(existing => existing.id !== (item?.id ?? deletedId));
+      if (item) items.push(item);
+      items.sort((a, b) => a.id - b.id);
+      return { ...previous, data: { ...previous.data, actions: { data: items, error: null } } };
+    });
+  }, [id]);
+  return { data: current ? current.data : previousData, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1), saveActionItem };
 }

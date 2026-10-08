@@ -100,8 +100,10 @@ class MeetingPage(Schema):
 class SegmentInput(Schema):
     speaker_id: int = Field(gt=0)
     position: int = Field(ge=0)
-    start_seconds: int = Field(ge=0)
-    end_seconds: int = Field(gt=0)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+    speaker_label: Name | None = None
+    timing_source: Literal['provided', 'inferred_end', 'estimated'] = 'provided'
     text: Text
 
     @model_validator(mode='after')
@@ -170,3 +172,47 @@ class ActionUpdate(Schema):
 class ActionRead(ActionCreate):
     id: int
     meeting_id: int
+
+
+class TranscriptImport(Schema):
+    format: Literal['txt', 'vtt', 'json']
+    content: Annotated[str, Field(min_length=1, max_length=1048576)]
+    filename: Annotated[str, Field(min_length=1, max_length=255)] | None = None
+
+    @model_validator(mode='after')
+    def valid_file(self):
+        if len(self.content.encode('utf-8')) > 1048576:
+            raise ValueError('Transcript must be at most 1 MiB of UTF-8 text')
+        if any(ord(char) < 32 and char not in '\n\r\t' for char in self.content):
+            raise ValueError('Transcript must be a UTF-8 text file without binary control characters')
+        if self.filename and not self.filename.lower().endswith('.' + self.format):
+            raise ValueError('Filename extension must match txt, vtt, or json format')
+        return self
+
+
+class ImportedAction(Schema):
+    text: Text
+    assignee: Annotated[str, Field(min_length=1, max_length=254)] | None = None
+    status: ActionStatus = 'open'
+    due_date: date | None = None
+
+
+class MeetingImport(MeetingCreate):
+    duration_seconds: int = Field(gt=0)
+    participants: list[ParticipantInput] = Field(min_length=1, max_length=100)
+    transcript: TranscriptImport
+    summary: SummaryInput | None = None
+    action_items: list[ImportedAction] | None = Field(default=None, max_length=500)
+
+    @field_validator('participants')
+    @classmethod
+    def unique_names(cls, value):
+        if len({person.name.casefold() for person in value}) != len(value):
+            raise ValueError('Participant names must be unique for speaker matching')
+        return value
+
+
+class MeetingImportResult(Schema):
+    meeting: MeetingRead
+    segment_count: int
+    warnings: list[str]

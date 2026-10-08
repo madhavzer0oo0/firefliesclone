@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./meeting-detail.css";
 @import "./transcript.css";
+@import "./action-items.css";
 
 :root {
   --background: #ffffff;

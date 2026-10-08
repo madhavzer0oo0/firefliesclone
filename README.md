@@ -1,6 +1,6 @@
 # Fireflies clone - meetings workspace
 
-Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview use live SQLite-backed data. Interactive Transcript and Action Items tabs are deferred.
+Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview, Transcript, and Action Items use live SQLite-backed data, with simulated transcript playback and persistent task management.
 
 ## Quick start on Windows
 
@@ -135,14 +135,28 @@ The library follows the icon rail, channel sidebar, purple active states, date-g
 The detail page follows the summary/transcript panel pattern from [Fireflies' official Notepad guide](https://guide.fireflies.ai/articles/6653885315-learn-about-the-fireflies-notepad). No attached detail screenshot was available in the implementation message; the official product screenshots supplied the visual reference.
 
 - Reuses the existing sidebar in a compact rail, with expandable workspace navigation. Header shows title, UTC-backed date in viewer-local time, duration, source, status, and a participant disclosure with every name/email.
-- Overview is the default tab. The Transcript tab expands the live transcript panel; switching tabs preserves playback and search. Action Items remains disabled/Coming Soon.
+- Overview is the default tab. The Transcript tab expands the live transcript panel; switching tabs preserves playback and search. Action Items supports persistent task management.
 - `components/meeting-detail/` separates header, tabs, overview sections, context panel, and loading/error states. `lib/meeting-detail.ts` composes the existing REST endpoints; `hooks/use-meeting-detail.ts` handles cancellation, stale-response protection, and refresh. No backend or schema changes were needed.
 - Metadata loads first. Summary, chapters, action items, and transcript then load concurrently. Section failures are isolated; missing summary content receives an empty state, while a missing meeting receives an explicit missing-meeting state. Invalid nonnumeric/unsafe IDs return a route 404.
-- Displays the complete saved overview and notes, with notes split into discussion points without generating text. Chapters display actual timestamps/descriptions and support expansion. The preview shows up to three actual tasks with assignees, deadlines, and status; no completion toggle is simulated.
+- Displays the complete saved overview and notes, with notes split into discussion points without generating text. Chapters display actual timestamps/descriptions and support expansion. The preview shows up to three actual tasks with assignees, deadlines, and status; Manage action items opens the editable Action Items tab.
 - Copy summary, copy link, refresh/retry, participant disclosure, chapter expansion, back navigation, and section links work. Editing, sharing, regeneration, and other future detail controls are disabled. No LLM service is called.
 - Direct links and browser refresh work without first visiting the library. Builds do not fetch backend data.
 
 ### Browser verification
+
+The task checklist and assignment controls follow [Fireflies' official Tasks Feed guide](https://guide.fireflies.ai/articles/1574234155-learn-about-the-tasks-feed), using the existing meeting page's spacing, colors, and icons.
+
+Action Items displays pending/completed groups with persistent checkboxes, participant assignees, optional deadlines, add/edit dialogs, and confirmed deletion. All mutations use the existing FastAPI endpoints; successful responses update the shared detail snapshot and Overview preview. Failures retain the saved row or form draft, display an error, and allow retry. Editing description/assignee/date preserves completion status. Transcript search and playback remain mounted while switching tabs.
+
+Run the entire suite, including real CRUD and reload persistence checks, against a disposable migrated/seeded SQLite database:
+
+```powershell
+# Stop the frontend on port 3000 first. The regular backend can keep running.
+$env:PLAYWRIGHT_CHANNEL = 'msedge'
+./scripts/test-e2e.ps1
+```
+
+The script uses API port 8001, starts the production frontend through Playwright, and restores the original API configuration/build afterward. Its database and logs remain under ignored `tmp/e2e-*/` for inspection. It never writes to `backend/fireflies.db`. Running `npm run test:e2e` directly skips the CRUD test unless isolated execution is explicitly enabled. Browser checks cover add/edit, assigned/unassigned tasks, complete/incomplete status, deletion/cancel, persistence through reload, validation/failure recovery, keyboard modal focus, other tabs, and responsive layouts.
 
 Transcript segments are loaded from SQLite through FastAPI, sorted chronologically, and rendered with stable speaker colors. Clicking a segment, dragging the timeline, keyboard seeking, or moving between literal search matches seeks the same authoritative playback clock. Search highlights every occurrence and wraps next/previous navigation. Automatic scrolling follows the active segment; manual scrolling pauses following until Resume follow is selected.
 
@@ -160,6 +174,6 @@ npm run test:e2e
 npx playwright install chromium
 ```
 
-Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. They do not create, edit, or delete database records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
+Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. Read tests leave saved records untouched; action CRUD tests require an isolated database and clean up their own records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
 
-Action Items editing, audio recordings, upload parsing, and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
+Audio recordings, upload parsing, and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.

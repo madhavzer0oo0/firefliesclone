@@ -7,9 +7,9 @@ import { formatDuration, initials } from "@/lib/meetings";
 import type { Meeting } from "@/types/api";
 import { speakerColor } from "@/lib/playback";
 
-interface HeaderProps { meeting: Meeting | null; loading: boolean; onMenuClick: () => void; onRefresh: () => void }
+interface HeaderProps { meeting: Meeting | null; loading: boolean; busy?: boolean; onMenuClick: () => void; onRefresh: () => void }
 
-export function MeetingDetailHeader({ meeting, loading, onMenuClick, onRefresh }: HeaderProps) {
+export function MeetingDetailHeader({ meeting, loading, busy = false, onMenuClick, onRefresh }: HeaderProps) {
   async function copyLink() {
     try { await navigator.clipboard.writeText(window.location.href); toast.success("Meeting link copied to clipboard."); }
     catch { toast.error("Couldn’t copy the link. Please try again."); }
@@ -17,7 +17,7 @@ export function MeetingDetailHeader({ meeting, loading, onMenuClick, onRefresh }
   return <>
     <header className="detail-topbar">
       <div className="detail-breadcrumb"><button className="icon-button" aria-label="Open navigation" onClick={onMenuClick}><Menu size={19} /></button><Link href="/meetings"><ArrowLeft size={15} /> Meetings</Link><span aria-hidden="true">/</span><span className="detail-breadcrumb-title">{meeting?.title ?? "Meeting overview"}</span></div>
-      <div className="detail-top-actions"><button className="icon-button" aria-label="Refresh meeting" onClick={onRefresh} disabled={loading}><RefreshCw size={16} className={loading ? "refreshing" : ""} /></button><button className="control-button detail-share" disabled title="Sharing is coming soon"><Share2 size={14} /> Share <span className="coming-soon-label">Soon</span></button><button className="icon-button" aria-label="Copy meeting link" onClick={copyLink} disabled={!meeting}><Link2 size={17} /></button><span className="profile-avatar detail-profile" title="Default demo workspace">DU</span></div>
+      <div className="detail-top-actions"><button className="icon-button" aria-label="Refresh meeting" onClick={onRefresh} disabled={loading || busy}><RefreshCw size={16} className={loading ? "refreshing" : ""} /></button><button className="control-button detail-share" disabled title="Sharing is coming soon"><Share2 size={14} /> Share <span className="coming-soon-label">Soon</span></button><button className="icon-button" aria-label="Copy meeting link" onClick={copyLink} disabled={!meeting}><Link2 size={17} /></button><span className="profile-avatar detail-profile" title="Default demo workspace">DU</span></div>
     </header>
     <div className="detail-meeting-heading">
       {meeting ? <>
