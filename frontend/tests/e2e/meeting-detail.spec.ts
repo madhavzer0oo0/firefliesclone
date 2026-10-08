@@ -19,7 +19,7 @@ test("direct detail navigation, full saved content, refresh, participants, and c
   await page.locator(".detail-attendees > summary").click();
   for (const person of meeting.participants) await expect(page.getByText(person.email, { exact: true })).toBeVisible();
   await page.locator(".detail-attendees > summary").click();
-  await expect(page.getByRole("tab", { name: /^Transcript/ })).toBeDisabled();
+  await expect(page.getByRole("tab", { name: /^Transcript/ })).toBeEnabled();
   await expect(page.getByRole("tab", { name: /^Action Items/ })).toBeDisabled();
   await expect(page.getByRole("button", { name: /^Share/ })).toBeDisabled();
   await expect(page.getByRole("button", { name: /^Edit/ })).toBeDisabled();

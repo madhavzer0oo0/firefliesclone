@@ -1,5 +1,6 @@
 import { api, ApiError } from "@/lib/api";
-import type { ActionItem, Chapter, Meeting, Summary } from "@/types/api";
+import type { ActionItem, Chapter, Meeting, Summary, TranscriptSegment } from "@/types/api";
+import { sortTranscriptSegments } from "@/lib/playback";
 
 export interface DetailResource<T> { data: T | null; error: string | null }
 export interface MeetingDetailData {
@@ -7,6 +8,7 @@ export interface MeetingDetailData {
   summary: DetailResource<Summary>;
   chapters: DetailResource<Chapter[]>;
   actions: DetailResource<ActionItem[]>;
+  transcript: DetailResource<TranscriptSegment[]>;
 }
 
 function resource<T>(result: PromiseSettledResult<T>, label: string, optional = false): DetailResource<T> {
@@ -19,14 +21,16 @@ function resource<T>(result: PromiseSettledResult<T>, label: string, optional = 
 
 export async function fetchMeetingDetail(id: number, signal: AbortSignal): Promise<MeetingDetailData> {
   const meeting = await api.getMeeting(id, signal);
-  const [summary, chapters, actions] = await Promise.allSettled([
+  const [summary, chapters, actions, transcript] = await Promise.allSettled([
     api.getSummary(id, signal), api.getChapters(id, signal), api.listActionItems(id, undefined, signal),
+    api.getTranscript(id, undefined, signal).then(sortTranscriptSegments),
   ]);
   return {
     meeting,
     summary: resource(summary, "summary", true),
     chapters: resource(chapters, "chapters"),
     actions: resource(actions, "action items"),
+    transcript: resource(transcript, "transcript"),
   };
 }
 

@@ -24,5 +24,6 @@ export function useMeetingDetail(id: number) {
   }, [id, key]);
 
   const current = result?.key === key ? result : null;
-  return { data: current?.data ?? null, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1) };
+  const previousData = result?.key.startsWith(`${id}:`) ? result.data : null;
+  return { data: current ? current.data : previousData, error: current?.error ?? null, missing: current?.missing ?? false, loading: !current, refresh: () => setRevision(value => value + 1) };
 }

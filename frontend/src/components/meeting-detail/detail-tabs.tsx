@@ -4,10 +4,15 @@ export type MeetingDetailTab = "overview" | "transcript" | "actions";
 
 const tabs = [
   { id: "overview", label: "Overview", icon: Sparkles, available: true },
-  { id: "transcript", label: "Transcript", icon: FileText, available: false },
+  { id: "transcript", label: "Transcript", icon: FileText, available: true },
   { id: "actions", label: "Action Items", icon: ListTodo, available: false },
 ] as const;
 
-export function MeetingDetailTabs() {
-  return <div className="detail-tabs" role="tablist" aria-label="Meeting detail tabs">{tabs.map(({ id, label, icon: Icon, available }) => <button key={id} id={`tab-${id}`} role="tab" aria-selected={id === "overview"} aria-controls={available ? "panel-overview" : undefined} disabled={!available} className={id === "overview" ? "active" : ""} title={!available ? `${label} is coming soon` : undefined}><Icon size={16} />{label}{!available && <span className="coming-soon-label">Coming Soon</span>}</button>)}</div>;
+export function MeetingDetailTabs({ activeTab, onChange }: { activeTab: MeetingDetailTab; onChange: (tab: MeetingDetailTab) => void }) {
+  return <div className="detail-tabs" role="tablist" aria-label="Meeting detail tabs">{tabs.map(({ id, label, icon: Icon, available }) => <button key={id} id={`tab-${id}`} role="tab" tabIndex={activeTab === id ? 0 : -1} aria-selected={activeTab === id} aria-controls={available ? `panel-${id}` : undefined} disabled={!available} className={activeTab === id ? "active" : ""} title={!available ? `${label} is coming soon` : undefined} onClick={() => onChange(id)} onKeyDown={event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? "overview" : event.key === "End" ? "transcript" : id === "overview" ? "transcript" : "overview";
+    onChange(next); document.getElementById(`tab-${next}`)?.focus();
+  }}><Icon size={16} />{label}{!available && <span className="coming-soon-label">Coming Soon</span>}</button>)}</div>;
 }

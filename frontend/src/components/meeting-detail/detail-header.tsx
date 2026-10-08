@@ -5,6 +5,7 @@ import { ArrowLeft, CalendarDays, Clock3, Link2, Menu, RefreshCw, Share2, Users,
 import { toast } from "sonner";
 import { formatDuration, initials } from "@/lib/meetings";
 import type { Meeting } from "@/types/api";
+import { speakerColor } from "@/lib/playback";
 
 interface HeaderProps { meeting: Meeting | null; loading: boolean; onMenuClick: () => void; onRefresh: () => void }
 
@@ -22,7 +23,7 @@ export function MeetingDetailHeader({ meeting, loading, onMenuClick, onRefresh }
       {meeting ? <>
         <div className="detail-title-row"><h1>{meeting.title}</h1><span className={`detail-status ${meeting.status}`}>{meeting.status}</span></div>
         <div className="detail-metadata"><span><CalendarDays size={14} /><time dateTime={meeting.started_at}>{new Date(meeting.started_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></span><span><Clock3 size={14} />{formatDuration(meeting.duration_seconds)}</span><span><Video size={14} />{meeting.source}</span></div>
-        <details className="detail-attendees"><summary><span className="detail-attendee-avatars" aria-hidden="true">{meeting.participants.slice(0, 4).map(person => <span key={person.id}>{initials(person.name)}</span>)}</span><Users size={14} /><span>{meeting.participants.length} {meeting.participants.length === 1 ? "participant" : "participants"}</span><span className="attendee-names">{meeting.participants.map(person => person.name).join(", ")}</span></summary><div className="detail-attendee-list">{meeting.participants.length ? meeting.participants.map(person => <div key={person.id}><span className="detail-person-avatar">{initials(person.name)}</span><div><strong>{person.name}</strong><span>{person.email}</span></div></div>) : <p>No participants have been added to this meeting.</p>}</div></details>
+        <details className="detail-attendees"><summary><span className="detail-attendee-avatars" aria-hidden="true">{meeting.participants.slice(0, 4).map(person => <span key={person.id} style={{ background: speakerColor(person.id) }}>{initials(person.name)}</span>)}</span><Users size={14} /><span>{meeting.participants.length} {meeting.participants.length === 1 ? "participant" : "participants"}</span><span className="attendee-names">{meeting.participants.map(person => person.name).join(", ")}</span></summary><div className="detail-attendee-list">{meeting.participants.length ? meeting.participants.map(person => <div key={person.id}><span className="detail-person-avatar" style={{ background: speakerColor(person.id), color: "white" }}>{initials(person.name)}</span><div><strong>{person.name}</strong><span>{person.email}</span></div></div>) : <p>No participants have been added to this meeting.</p>}</div></details>
       </> : loading ? <div className="detail-heading-skeleton" aria-label="Loading meeting metadata"><div className="skeleton" /><div className="skeleton" /></div> : <h1>Meeting overview</h1>}
     </div>
   </>;

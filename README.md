@@ -135,14 +135,18 @@ The library follows the icon rail, channel sidebar, purple active states, date-g
 The detail page follows the summary/transcript panel pattern from [Fireflies' official Notepad guide](https://guide.fireflies.ai/articles/6653885315-learn-about-the-fireflies-notepad). No attached detail screenshot was available in the implementation message; the official product screenshots supplied the visual reference.
 
 - Reuses the existing sidebar in a compact rail, with expandable workspace navigation. Header shows title, UTC-backed date in viewer-local time, duration, source, status, and a participant disclosure with every name/email.
-- Overview is active. Transcript and Action Items tabs are visibly disabled/Coming Soon. The context panel reserves space for future transcript work, so the header/layout do not need to be rebuilt.
+- Overview is the default tab. The Transcript tab expands the live transcript panel; switching tabs preserves playback and search. Action Items remains disabled/Coming Soon.
 - `components/meeting-detail/` separates header, tabs, overview sections, context panel, and loading/error states. `lib/meeting-detail.ts` composes the existing REST endpoints; `hooks/use-meeting-detail.ts` handles cancellation, stale-response protection, and refresh. No backend or schema changes were needed.
-- Metadata loads first. Summary, chapters, and action items then load concurrently. Section failures are isolated; missing summary content receives an empty state, while a missing meeting receives an explicit missing-meeting state. Invalid nonnumeric/unsafe IDs return a route 404.
+- Metadata loads first. Summary, chapters, action items, and transcript then load concurrently. Section failures are isolated; missing summary content receives an empty state, while a missing meeting receives an explicit missing-meeting state. Invalid nonnumeric/unsafe IDs return a route 404.
 - Displays the complete saved overview and notes, with notes split into discussion points without generating text. Chapters display actual timestamps/descriptions and support expansion. The preview shows up to three actual tasks with assignees, deadlines, and status; no completion toggle is simulated.
 - Copy summary, copy link, refresh/retry, participant disclosure, chapter expansion, back navigation, and section links work. Editing, sharing, regeneration, and other future detail controls are disabled. No LLM service is called.
 - Direct links and browser refresh work without first visiting the library. Builds do not fetch backend data.
 
 ### Browser verification
+
+Transcript segments are loaded from SQLite through FastAPI, sorted chronologically, and rendered with stable speaker colors. Clicking a segment, dragging the timeline, keyboard seeking, or moving between literal search matches seeks the same authoritative playback clock. Search highlights every occurrence and wraps next/previous navigation. Automatic scrolling follows the active segment; manual scrolling pauses following until Resume follow is selected.
+
+No sample recording is present. The player explicitly displays **Simulated playback** and advances by monotonic elapsed time over the meeting duration. It pauses when the page is hidden, stops at the duration, and cleans up timers/listeners on pause or unmount. It produces no audio. Timestamp matching uses half-open ranges; gaps and the exact meeting end have no active segment. Run `npm run test:unit` for boundary, seeking, clock, and literal-search tests; `scripts/verify.ps1` includes them.
 
 Start the seeded backend first, then build the frontend. Playwright starts the production frontend automatically unless a server is already running:
 
@@ -156,6 +160,6 @@ npm run test:e2e
 npx playwright install chromium
 ```
 
-Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled tabs/controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. They do not create, edit, or delete database records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
+Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. They do not create, edit, or delete database records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
 
-Interactive Transcript and Action Items tabs, upload parsing, playback interactions, and hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
+Action Items editing, audio recordings, upload parsing, and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
