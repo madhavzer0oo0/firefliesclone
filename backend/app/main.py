@@ -4,6 +4,12 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.responses import JSONResponse
 from .api import router
 from .config import settings
+from .database import get_db
+from .models import Meeting
+from fastapi import Depends
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 app = FastAPI(title='Fireflies Clone API', version='0.1.0')
 app.add_middleware(
@@ -24,3 +30,12 @@ async def integrity_error(_request, _error):
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.get('/ready')
+def readiness(db: Session = Depends(get_db)):
+    try:
+        db.execute(select(Meeting.id).limit(1))
+    except SQLAlchemyError:
+        return JSONResponse(status_code=503, content={'status': 'unavailable'})
+    return {'status': 'ready'}

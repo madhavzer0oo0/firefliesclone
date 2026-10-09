@@ -50,6 +50,13 @@ button:disabled:hover { cursor: not-allowed; }
 .meeting-workspace .library-state p, .meeting-workspace .detail-error p, .meeting-workspace .transcript-empty p, .meeting-workspace .detail-empty-message { color: #69758b; font-size: 13px; line-height: 1.8; }
 .meeting-workspace .library-state h2, .meeting-workspace .detail-error h2, .meeting-workspace .transcript-empty h3 { color: #34415a; font-weight: 500; }
 .meeting-workspace .state-icon { background: #f2edff; color: #8056da; }
+.meeting-workspace .detail-section-message, .meeting-workspace .action-group-empty { color: #69758b; font-size: 13px; border-color: #dfe3ed; background: #fafbfe; }
+.meeting-workspace .detail-section-message.is-error, .meeting-workspace .action-operation-error { color: #a82b43; border-color: #f0ccd3; background: #fff5f6; }
+.meeting-workspace .action-items-empty h3 { color: #34415a; }
+.meeting-workspace .action-items-empty p, .meeting-workspace .action-editor-hint { color: #69758b; font-size: 13px; }
+.meeting-workspace .action-editor label span { color: #756983; font-size: 11px; }
+.meeting-workspace .overview-index a, .meeting-workspace .context-meeting-info dl { color: #69758b; font-size: 12px; }
+.meeting-workspace .context-meeting-info dt, .meeting-workspace .context-meeting-info dd { color: #69758b; }
 .meeting-workspace .skeleton { background: #edf0f6; border-radius: 5px; }
 .meeting-workspace .detail-title-row h1 { font-weight: 500; letter-spacing: -.55px; overflow-wrap: anywhere; }
 .meeting-workspace .detail-title-row { flex-wrap: wrap; }

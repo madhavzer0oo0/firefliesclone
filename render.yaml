@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: fireflies-clone-api
+    runtime: python
+    plan: 0.5c-512mb
+    rootDir: backend
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: python -m app.deployment
+    healthCheckPath: /ready
+    numInstances: 1
+    disk:
+      name: fireflies-sqlite
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        value: sqlite:////var/data/fireflies.db
+      - key: PERSISTENT_DATA_DIR
+        value: /var/data
+      - key: SEED_ON_START
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false

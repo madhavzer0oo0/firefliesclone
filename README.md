@@ -2,6 +2,18 @@
 
 Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview, Transcript, and Action Items use live SQLite-backed data, with simulated transcript playback and persistent task management.
 
+## Submission status and tech stack
+
+This is a default-user post-meeting workspace for the Scaler SDE assignment. The public source repository is [madhavzer0oo0/firefliesclone](https://github.com/madhavzer0oo0/firefliesclone). **There is no verified hosted demo yet.** Deployment configurations are supplied below; a working public frontend link remains required before submission. The complete PDF requirement audit and verification evidence are in [docs/submission-audit.md](docs/submission-audit.md).
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js App Router, TypeScript, React, Tailwind CSS v4, local shadcn/ui components, Lucide icons, Sonner toasts |
+| Backend | Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy v2 |
+| Persistence | SQLite, foreign-key enforcement, frozen Alembic migrations |
+| Verification | pytest with migrated temporary databases, Playwright unit/browser tests, ESLint, TypeScript, production build |
+| Deployment target | Vercel frontend; Render persistent disk or Railway volume for the FastAPI backend |
+
 ## Quick start on Windows
 
 Requires Python 3.11+ and Node.js 20.9+ with npm. Run from the repository root:
@@ -38,6 +50,31 @@ The database defaults to `backend/fireflies.db` regardless of your current direc
 
 ## Architecture and database
 
+```mermaid
+flowchart LR
+  Browser[Browser: library / detail / import / settings] --> Next[Next.js pages and reusable components]
+  Next --> Hooks[Hooks: cancellation, playback, mutations]
+  Hooks --> Client[Typed API client]
+  Client -->|HTTP JSON /api/v1| API[FastAPI routes and Pydantic validation]
+  API --> ORM[SQLAlchemy transaction and relationships]
+  ORM --> DB[(SQLite on persistent disk)]
+  Alembic[Alembic migrations at deployment startup] --> DB
+```
+
+The applications remain separate. Next.js has no duplicate data API. Browser requests go directly to FastAPI, with explicit CORS origins. Playback uses a local clock; all meeting content and successful CRUD writes come from SQLite.
+
+```mermaid
+erDiagram
+  meetings ||--o{ meeting_participants : includes
+  participants ||--o{ meeting_participants : attends
+  meetings ||--o{ transcript_segments : contains
+  meeting_participants ||--o{ transcript_segments : speaks
+  meetings ||--o| summaries : has
+  meetings ||--o{ chapters : outlines
+  meetings ||--o{ action_items : owns
+  meeting_participants o|--o{ action_items : assigned
+```
+
 | Table | Role and relationships |
 | --- | --- |
 | meetings | Title, UTC start, duration, processing/completed/failed status, source, created/updated timestamps |
@@ -69,6 +106,8 @@ Prefix: `/api/v1`. Interactive request/response schemas: `/docs`; machine-readab
 | GET / PUT | /meetings/{id}/chapters | Read or atomically replace chapter array |
 | GET / POST | /meetings/{id}/action-items | List with optional `status`; create (201) |
 | GET / PATCH / DELETE | /meetings/{id}/action-items/{item_id} | Read/edit/delete a meeting-scoped task |
+
+Unprefixed infrastructure endpoints: `GET /health` reports process liveness; `GET /ready` checks that the meeting table is readable (503 when unavailable). `/docs` and `/openapi.json` expose the full typed contracts.
 
 Meeting list query parameters: `q` matches title or transcript text by default; with `search_scope=library` it matches title OR participant name/email. With `search_scope=everywhere`, `q` matches title OR participant OR transcript text. Independent `title` and `participant` filters combine with `q` using AND. Transcript matches expose a nullable `match` containing the first chronological segment ID, timestamp, speaker label, and bounded snippet. Other filters: `status`; inclusive `date_from`/`date_to`; `sort=started_at|title|duration_seconds`; `order=asc|desc`; `limit=1..100` (default 20); `offset>=0` (default 0). Default order is newest first; IDs break ties. Each list item includes a nullable `preview` from the stored summary overview, loaded with one batch query per page. Text matching is case-insensitive for ASCII and treats SQL wildcard characters literally. SQLite's default lower-case matching is not full Unicode case folding. This small dataset uses substring matching; title indexes do not accelerate arbitrary substring searches.
 
@@ -161,7 +200,7 @@ The library follows the icon rail, channel sidebar, purple active states, date-g
 - `hooks/use-meetings.ts`: debouncing, request cancellation, stale-response protection, retries.
 - `lib/meetings.ts`: API query construction, local-date boundaries, formatting, error messages.
 - Cards come entirely from FastAPI. Filtering and pagination run in the backend, with 12 results per page. Search supports title or participant; advanced filters support title AND participant AND local-calendar date ranges. Enable transcript content in Filters for highlighted snippets linking to `/meetings/[id]?tab=transcript&segment=ID&q=QUERY`. No frontend fixture cards are rendered.
-- The default-user workspace has no ownership/sharing model, so My Meetings and All Meetings show the same accessible records. Integrations, custom channels, profiles/settings, and voice-agent controls show explicit placeholder toasts.
+- The default-user workspace has no ownership/sharing model, so My Meetings and All Meetings show the same accessible records. Integrations, custom channels, profiles, and voice-agent controls are explicit placeholders. Settings is a real page with clearly disabled previews.
 - Meeting links navigate to `/meetings/{id}`, which displays a real Overview with summary, saved discussion points, chapters, and action-item previews.
 
 ## Meeting detail / Overview
@@ -173,7 +212,7 @@ The detail page follows the summary/transcript panel pattern from [Fireflies' of
 - `components/meeting-detail/` separates header, tabs, overview sections, context panel, and loading/error states. `lib/meeting-detail.ts` composes the existing REST endpoints; `hooks/use-meeting-detail.ts` handles cancellation, stale-response protection, and refresh. No backend or schema changes were needed.
 - Metadata loads first. Summary, chapters, action items, and transcript then load concurrently. Section failures are isolated; missing summary content receives an empty state, while a missing meeting receives an explicit missing-meeting state. Invalid nonnumeric/unsafe IDs return a route 404.
 - Displays the complete saved overview and notes, with notes split into discussion points without generating text. Chapters display actual timestamps/descriptions and support expansion. The preview shows up to three actual tasks with assignees, deadlines, and status; Manage action items opens the editable Action Items tab.
-- Copy summary, copy link, refresh/retry, participant disclosure, chapter expansion, back navigation, and section links work. Editing, sharing, regeneration, and other future detail controls are disabled. No LLM service is called.
+- Copy summary, copy link, refresh/retry, participant disclosure, chapter expansion, back navigation, metadata editing, deletion, and section links work. Summary editing, sharing, regeneration, and other future detail controls are disabled. No LLM service is called.
 - Direct links and browser refresh work without first visiting the library. Builds do not fetch backend data.
 
 ### Browser verification
@@ -208,7 +247,7 @@ npm run test:e2e
 npx playwright install chromium
 ```
 
-Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings toast, navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. Read tests leave saved records untouched; action CRUD tests require an isolated database and clean up their own records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
+Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. Read tests leave saved records untouched; action CRUD tests require an isolated database and clean up their own records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
 
 Audio recordings and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
 
@@ -217,3 +256,77 @@ Audio recordings and a hosted demo remain future work. Nothing has been publishe
 Dashboard cards and detail headers expose actual PATCH editing and confirmed DELETE operations. Edit title, add participants, and remove unreferenced participants. Existing shared contact identities are read-only; removing a transcript speaker or task assignee is blocked by both UI and API. Successful edits update the detail snapshot without resetting playback or tabs; library writes, focus, visibility, and back navigation trigger fresh API reads. Deletion removes meeting-owned rows while keeping reusable contacts. Native dialogs trap focus, support Escape, restore focus, and block dismissal during writes. Server errors keep drafts open and never emit success feedback.
 
 Management browser tests run only against the disposable migrated SQLite database via `scripts/test-e2e.ps1`; they cover edits, participant membership, delete confirmation, persistence, combined filters, global transcript navigation, failed requests, focus trapping, and responsive dialogs.
+
+### Product styling and Settings
+
+`src/app/product-polish.css` is the final shared visual layer after the route-specific styles, with consistent typography, contrast, controls, purple accents, dialog/error states, and responsive layouts. Mobile Overview keeps transcript access in the Transcript tab instead of duplicating the panel under the summary. The shared Button exposes `data-variant` for semantic styling. Toasts appear above the content rather than covering playback controls.
+
+`/settings` is reachable from the sidebar and library header. Account, notifications, calendar, meeting bots, integrations, and privacy/access cards are explicit previews with disabled Coming Soon controls. Section links navigate to their cards; transcript import remains a working link. No settings persistence or external integrations are implied.
+
+## Environment variables
+
+| Variable | Service | Local default / production requirement |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | Frontend | `http://localhost:8000/api/v1`; public HTTPS API URL including `/api/v1` on Vercel. Compiled into the browser bundle: rebuild after changing it. |
+| `DATABASE_URL` | Backend | Absolute `backend/fireflies.db` by default; production must explicitly use an absolute SQLite file inside the mounted volume. |
+| `CORS_ORIGINS` | Backend | JSON list of `http://localhost:3000` and `http://127.0.0.1:3000`; production exact frontend HTTPS origin(s), without paths/trailing slashes. |
+| `PERSISTENT_DATA_DIR` | Deployment entry point | Required absolute existing mounted directory, e.g. `/var/data` on Render or `/data` on Railway. |
+| `SEED_ON_START` | Deployment entry point | `false` by default; Blueprint sets `true` to seed an empty demo once. Existing meetings are always preserved. |
+| `PORT` | Deployment entry point | Platform-provided HTTP port; default 8000. Bind `0.0.0.0`, one process. |
+
+The production entry point validates storage paths and origins, upgrades Alembic, optionally seeds, and then starts Uvicorn. Normal development commands remain explicit migration/seed steps. A directory existing does not prove it is persistent: attach a real hosting disk/volume and verify a restart before declaring persistence.
+
+## Deployment instructions
+
+### Vercel frontend
+
+1. Import the GitHub repository into Vercel. Set **Root Directory = `frontend`**, framework Next.js, Node 22. `frontend/vercel.json` supplies `npm ci` and `npm run build`.
+2. Set `NEXT_PUBLIC_API_URL` for Production to the actual backend HTTPS origin plus `/api/v1`. Do not use localhost, a guessed URL, or a placeholder domain. The Vercel build refuses missing/invalid public API configuration.
+3. Deploy. Copy the actual frontend origin from Vercel and enter it in backend `CORS_ORIGINS` as a JSON list. Re-deploy the backend after changing origins. Add preview origins explicitly only when needed.
+4. If the API URL changes, update the frontend variable and trigger a new build. Test `/meetings`, direct `/meetings/{id}`, `/meetings/new`, and `/settings` at the real public URL.
+
+See [Vercel environment variable documentation](https://vercel.com/docs/environment-variables) for project environment and redeployment behavior.
+
+### Render backend (primary option)
+
+1. Push the deployment files to the public repository and create a Render Blueprint using root `render.yaml`. Review billing before creating the service: persistent disks require a paid service.
+2. The Blueprint uses root `backend`, locked Python dependencies, one instance, and a 1 GB disk mounted at `/var/data`. It sets `DATABASE_URL=sqlite:////var/data/fireflies.db` and `PERSISTENT_DATA_DIR=/var/data`. Keep both paths aligned with the attached disk.
+3. Set the prompted `CORS_ORIGINS` to `["https://YOUR-ACTUAL-FRONTEND-ORIGIN"]` (replace this placeholder). Start command is `python -m app.deployment`; health path is `/ready`.
+4. Migrations and seeding run at **runtime after disk mount**. Do not move them into the build or pre-deploy command: Render disks are unavailable there. Startup seeding is idempotent and never overwrites an existing meeting library.
+5. Copy the assigned public backend URL into Vercel's `NEXT_PUBLIC_API_URL`, build the frontend, then finish CORS configuration with the real Vercel origin. Keep a single backend instance; the SQLite file is not shared among independent disks/replicas.
+
+The configuration follows [Render Blueprint fields](https://render.com/docs/blueprint-spec) and [persistent disk lifecycle](https://render.com/docs/disks). No Render service has been created or publicly verified during this audit.
+
+### Railway backend (alternative)
+
+1. Create a GitHub-backed service with **Root Directory = `/backend`** and select its `Dockerfile` build. Set the start command to `python -m app.deployment`, health check `/ready`, health timeout 120 seconds, restart on failure, and one replica in service settings. The Dockerfile installs locked dependencies and runs the same production entry point. New Railway services no longer accept legacy `railway.toml` configuration; use dashboard settings for this deployment.
+2. Attach a Railway **volume** mounted at `/data`, then set `PERSISTENT_DATA_DIR=/data`, `DATABASE_URL=sqlite:////data/fireflies.db`, `SEED_ON_START=true`, and `CORS_ORIGINS` to the exact frontend HTTPS origin list.
+3. Keep one replica, generate a public HTTPS domain, and use the platform `PORT`. Use `/ready` for health checks. Do not place the database in `/app` or another ephemeral image directory.
+4. Set Vercel's API URL to the assigned domain plus `/api/v1`, rebuild, and run the public checks below. Volume attachment is a dashboard operation; a TOML file alone does not provision persistence.
+
+See [Railway config-as-code](https://docs.railway.com/config-as-code) and [volume documentation](https://docs.railway.com/volumes). The Docker image and hosting configuration are prepared; an actual Railway deployment has not been verified.
+
+### Public acceptance and backups
+
+After deployment, run this read-only check with **actual** origins:
+
+```sh
+python scripts/check-public.py --frontend https://YOUR-FRONTEND --backend https://YOUR-BACKEND
+```
+
+It verifies public HTML routes/direct navigation, API readiness, populated content, and CORS including import preflight. It does not prove interactive CRUD or disk durability. In the public browser create a uniquely named disposable meeting, edit its title, add/complete a task, reload, then restart/redeploy the backend and confirm the same meeting/transcript/task remain. Delete only that test meeting afterwards. Check developer tools for mixed-content, localhost requests, CORS errors, and failed requests. Record both verified URLs and restart evidence in the submission checklist.
+
+Back up SQLite using its online backup API (Python `sqlite3.Connection.backup`) to a separately retained destination; do not copy a live database file with uncheckpointed writes. Keep backups and uploaded/user data outside Git. Restore into a mounted disk and run Alembic before serving. Disk snapshots alone are not a substitute for verifying a database restore.
+
+## Design decisions, assumptions, and limitations
+
+- Seed content is original synthetic data: seven complete short meetings, saved summaries/notes/chapters, and assigned tasks. No clone repository code or real meeting recordings are used. User-supplied summary/task content is preserved; imported transcripts are not summarized automatically.
+- The PDF permits seeded summaries, placeholder media, default-user authentication, and Coming Soon integrations. Playback is explicitly simulated; there is no audio, speech-to-text, live bot, LLM, CRM/calendar connection, or genuine sharing. Imported unstructured timings are visibly marked estimates.
+- Speaker labels are separate from shared participant identities; composite membership keys prevent cross-meeting assignments. Referenced speakers/assignees cannot be removed from membership. Remove/reassign their content first using the API. Metadata editing never renames a contact globally.
+- The playback reducer is the authoritative clock, matching half-open segment intervals. Gaps have no active segment. Pause, seek, visibility pause, timer cleanup, search navigation, and user-controlled auto-follow are tested.
+- UTC storage and timezone-aware requests preserve date boundaries; the UI displays local dates. Transcript times support fractions, while duration/chapters use integer seconds. Transactions validate before replacing collections or importing.
+- A single-instance SQLite backend is appropriate for this assignment dataset. Substring search is literal and ASCII case-insensitive, with deterministic pagination; it is not Unicode-aware full-text search. Horizontal scaling requires a database architecture change.
+- This is a shared, unauthenticated demonstration workspace: public visitors can modify its data. Use synthetic content only. CORS controls browser origins, not authorization. Do not use this app for confidential production meetings.
+- Optional global transcript search/snippets/deep links are implemented. Optional comments, soundbites, exports, tags, Ask AI, and dark mode are not implemented. The settings previews do not persist preferences.
+- Visual references are official Fireflies guide screenshots; no attached dashboard/detail screenshot file was available in this workspace. Desktop/mobile layout checks pass, but pixel-perfect equivalence to an unavailable attachment cannot be certified.
+- Hosting accounts, billed storage provisioning, a verified public application URL, and publishing the final local changes remain external submission steps. CI is supplied but its GitHub run must be verified after publication. The candidate must understand/explain the implementation in the interview; automated checks cannot certify that requirement.
