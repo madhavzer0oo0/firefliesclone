@@ -1,10 +1,20 @@
 # Fireflies clone - meetings workspace
 
-Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview, Transcript, and Action Items use live SQLite-backed data, with simulated transcript playback and persistent task management.
+Separate Next.js App Router/TypeScript and FastAPI applications, with SQLite/SQLAlchemy persistence, Alembic migrations, Tailwind CSS, and shadcn/ui. The `/meetings` library and `/meetings/[id]` Overview, Transcript, and Action Items use live SQLite-backed data, with simulated transcript playback and real task CRUD. Local databases and mounted hosting volumes retain changes; the current Render Free demo uses temporary storage.
 
 ## Submission status and tech stack
 
-This is a default-user post-meeting workspace for the Scaler SDE assignment. The public source repository is [madhavzer0oo0/firefliesclone](https://github.com/madhavzer0oo0/firefliesclone). **There is no verified hosted demo yet.** Deployment configurations are supplied below; a working public frontend link remains required before submission. The complete PDF requirement audit and verification evidence are in [docs/submission-audit.md](docs/submission-audit.md).
+This is a default-user post-meeting workspace for the Scaler SDE assignment. No login or sign-up is required.
+
+- **Live frontend:** [Meetings library](https://firefliesclone-8zzs.vercel.app/meetings)
+- **Live backend:** [API documentation](https://firefliesclone-2.onrender.com/docs) and [database readiness](https://firefliesclone-2.onrender.com/ready)
+- **Public source:** [madhavzer0oo0/firefliesclone](https://github.com/madhavzer0oo0/firefliesclone)
+
+**Current hosting limitation:** Render Free stores SQLite at `/tmp/fireflies.db` and discards filesystem changes on sleep, restart, or redeploy. Startup migrates a new database and restores the seven seeded sample meetings. User-created meetings, edits, deletions, and task completion changes are lost. Browser refresh alone preserves changes while the same backend instance remains running. This deployment does **not** satisfy durable storage across hosting restarts. Render Free sleeps after 15 minutes without inbound traffic and can take about a minute to wake. See [Render Free limitations](https://render.com/docs/free).
+
+On **9 October 2026**, the read-only public smoke check passed for HTML routes, direct detail navigation, API readiness, seed content, and CORS including import preflight. A browser check confirmed that meetings rendered, clicking a meeting opened its summary, and no page JavaScript errors occurred during those checks. Full public CRUD and restart persistence were not verified. Earlier local verification passed 78 backend tests, 5 frontend unit tests, 46 isolated browser tests, lint, typecheck, and production build. These are recorded results, not checks automatically repeated on every deployment.
+
+The PDF requirement audit and local verification evidence are in [docs/submission-audit.md](docs/submission-audit.md); its earlier hosting status predates these public checks. Durable storage remains an outstanding submission requirement.
 
 | Layer | Technology |
 | --- | --- |
@@ -12,7 +22,7 @@ This is a default-user post-meeting workspace for the Scaler SDE assignment. The
 | Backend | Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy v2 |
 | Persistence | SQLite, foreign-key enforcement, frozen Alembic migrations |
 | Verification | pytest with migrated temporary databases, Playwright unit/browser tests, ESLint, TypeScript, production build |
-| Deployment target | Vercel frontend; Render persistent disk or Railway volume for the FastAPI backend |
+| Hosting | Vercel frontend + Render Free temporary SQLite demo; mounted Render disk or Railway volume for durable SQLite |
 
 ## Quick start on Windows
 
@@ -57,11 +67,11 @@ flowchart LR
   Hooks --> Client[Typed API client]
   Client -->|HTTP JSON /api/v1| API[FastAPI routes and Pydantic validation]
   API --> ORM[SQLAlchemy transaction and relationships]
-  ORM --> DB[(SQLite on persistent disk)]
+  ORM --> DB[(SQLite file)]
   Alembic[Alembic migrations at deployment startup] --> DB
 ```
 
-The applications remain separate. Next.js has no duplicate data API. Browser requests go directly to FastAPI, with explicit CORS origins. Playback uses a local clock; all meeting content and successful CRUD writes come from SQLite.
+The applications remain separate. Next.js has no duplicate data API. Browser requests go directly to FastAPI, with explicit CORS origins. Playback uses a local clock; all meeting content and successful CRUD writes come from SQLite. The file is durable locally or on a mounted hosting volume; the current free demo uses an ephemeral filesystem.
 
 ```mermaid
 erDiagram
@@ -125,7 +135,7 @@ Example meeting creation:
 
 Creation returns participant IDs for subsequent transcript and task writes. Metadata is created first, then transcript/summary/chapters/tasks can be submitted through their endpoints. Transcript and chapter PUT accept arrays, including `[]` to clear. Summary PUT requires `overview` and defaults `notes` to empty. Task creation requires `text`; assignee and deadline are optional. PATCH omission preserves fields; `assignee_id` and `due_date` accept null to clear. A participant's email resolves an existing person without renaming that person across other meetings.
 
-Missing records return 404; invalid fields, timestamps, or memberships return 422; database conflicts return 409. Validation uses FastAPI's standard `detail` shape; relational validation uses a detail string. No authentication is implemented; this is a local default-user assignment workspace. CORS defaults to the two local frontend origins. Audio/video, bot integrations, and speech-to-text are out of scope; text transcript imports are supported. No calls to real AI services occur.
+Missing records return 404; invalid fields, timestamps, or memberships return 422; database conflicts return 409. Validation uses FastAPI's standard `detail` shape; relational validation uses a detail string. No authentication is implemented; this is a shared default-user assignment workspace. CORS defaults to the two local frontend origins. Audio/video, bot integrations, and speech-to-text are out of scope; text transcript imports are supported. No calls to real AI services occur.
 
 ## Seed and migration workflow
 
@@ -149,6 +159,7 @@ Downgrading the initial revision removes all application tables and data; use on
 cd backend
 ./.venv/Scripts/python.exe -m pytest -q
 cd ../frontend
+npm run test:unit
 npm run typecheck
 npm run lint
 npm run build
@@ -249,7 +260,7 @@ npx playwright install chromium
 
 Browser tests verify live data, title/participant search, participant/date filters, date validation, recency sorting, empty/reset states, loading/error/retry, keyboard search, settings navigation, and library layout/menu behavior at 375, 768, and 1440 pixels. Detail tests additionally verify direct navigation and refresh, full summary and notes, chapters/action previews, participant disclosure, clipboard controls, disabled future controls, missing meetings/invalid IDs, section-specific errors, empty content, and responsive layouts. Read tests leave saved records untouched; action CRUD tests require an isolated database and clean up their own records. Run against the original seeded dataset. Screenshots/traces are ignored under `frontend/test-results/`.
 
-Audio recordings and a hosted demo remain future work. Nothing has been published or deployed by these setup scripts.
+The hosted demo is linked above. No audio recording is included; playback is explicitly simulated. Setup scripts initialize local services and do not publish deployments.
 
 ### Meeting management
 
@@ -287,7 +298,48 @@ The production entry point validates storage paths and origins, upgrades Alembic
 
 See [Vercel environment variable documentation](https://vercel.com/docs/environment-variables) for project environment and redeployment behavior.
 
-### Render backend (primary option)
+### Render Free backend (current demo)
+
+Create a **Web Service manually** from the GitHub repository. Do not use the current `render.yaml` Blueprint for the free demo: it provisions a paid service and disk.
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `backend` |
+| Runtime | Python 3 |
+| Branch | `main` |
+| Instance Type | Free |
+| Build Command | `pip install -r requirements.lock.txt` |
+| Health Check | `/ready` |
+
+Use this exact start command in Render's Linux shell:
+
+```sh
+python -c "import os; from app.deployment import prepare_database; prepare_database(os.environ['DATABASE_URL'], True)" && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+```
+
+This demo command runs migrations and seeds only an empty library, then starts one Uvicorn process. It intentionally bypasses the persistent-storage validator in `python -m app.deployment`; it does not make temporary storage durable.
+
+Set these backend environment variables:
+
+```dotenv
+PYTHON_VERSION=3.12.8
+DATABASE_URL=sqlite:////tmp/fireflies.db
+CORS_ORIGINS=["https://firefliesclone-8zzs.vercel.app"]
+```
+
+Do not set `PERSISTENT_DATA_DIR` for this demo or attach a disk. Render supplies `PORT`; seeding is enabled directly in the start command. A local-only initial setup can temporarily use `CORS_ORIGINS=["http://localhost:3000"]`, then replace it with the actual Vercel HTTPS origin before testing the public frontend.
+
+The current Vercel Production environment uses:
+
+```dotenv
+NEXT_PUBLIC_API_URL=https://firefliesclone-2.onrender.com/api/v1
+```
+
+Set this in the Vercel dashboard; do not upload `.env.local`. Rebuild/redeploy the frontend after changing it. Replace both domains if deploying your own copy. CORS origins contain no path or trailing slash. Saving environment changes on Render requires deploying the updated configuration.
+
+The seeded meetings are original backend seed data, not hardcoded React cards. They return after an empty database is initialized; edits made during a previous instance do not return. For submission, disclose this limitation or switch to mounted storage using the durable setup below.
+
+### Render backend with durable storage
 
 1. Push the deployment files to the public repository and create a Render Blueprint using root `render.yaml`. Review billing before creating the service: persistent disks require a paid service.
 2. The Blueprint uses root `backend`, locked Python dependencies, one instance, and a 1 GB disk mounted at `/var/data`. It sets `DATABASE_URL=sqlite:////var/data/fireflies.db` and `PERSISTENT_DATA_DIR=/var/data`. Keep both paths aligned with the attached disk.
@@ -295,7 +347,7 @@ See [Vercel environment variable documentation](https://vercel.com/docs/environm
 4. Migrations and seeding run at **runtime after disk mount**. Do not move them into the build or pre-deploy command: Render disks are unavailable there. Startup seeding is idempotent and never overwrites an existing meeting library.
 5. Copy the assigned public backend URL into Vercel's `NEXT_PUBLIC_API_URL`, build the frontend, then finish CORS configuration with the real Vercel origin. Keep a single backend instance; the SQLite file is not shared among independent disks/replicas.
 
-The configuration follows [Render Blueprint fields](https://render.com/docs/blueprint-spec) and [persistent disk lifecycle](https://render.com/docs/disks). No Render service has been created or publicly verified during this audit.
+The configuration follows [Render Blueprint fields](https://render.com/docs/blueprint-spec) and [persistent disk lifecycle](https://render.com/docs/disks). The currently verified public service uses the free setup above; this persistent-disk configuration has not been deployed or verified.
 
 ### Railway backend (alternative)
 
@@ -311,10 +363,12 @@ See [Railway config-as-code](https://docs.railway.com/config-as-code) and [volum
 After deployment, run this read-only check with **actual** origins:
 
 ```sh
-python scripts/check-public.py --frontend https://YOUR-FRONTEND --backend https://YOUR-BACKEND
+python scripts/check-public.py --frontend https://firefliesclone-8zzs.vercel.app --backend https://firefliesclone-2.onrender.com
 ```
 
-It verifies public HTML routes/direct navigation, API readiness, populated content, and CORS including import preflight. It does not prove interactive CRUD or disk durability. In the public browser create a uniquely named disposable meeting, edit its title, add/complete a task, reload, then restart/redeploy the backend and confirm the same meeting/transcript/task remain. Delete only that test meeting afterwards. Check developer tools for mixed-content, localhost requests, CORS errors, and failed requests. Record both verified URLs and restart evidence in the submission checklist.
+It verifies public HTML routes/direct navigation, API readiness, populated content, and CORS including import preflight. It does not prove interactive CRUD or disk durability. For a durable deployment, in the public browser create a uniquely named disposable meeting, edit its title, add/complete a task, reload, then restart/redeploy the backend and confirm the same meeting/transcript/task remain. Delete only that test meeting afterwards. Check developer tools for mixed-content, localhost requests, CORS errors, and failed requests. Record both verified URLs and restart evidence in the submission checklist.
+
+The current Render Free deployment is expected to lose these records on restart; it cannot pass the durability check. Avoid restarting a shared demo during another visitor's session.
 
 Back up SQLite using its online backup API (Python `sqlite3.Connection.backup`) to a separately retained destination; do not copy a live database file with uncheckpointed writes. Keep backups and uploaded/user data outside Git. Restore into a mounted disk and run Alembic before serving. Disk snapshots alone are not a substitute for verifying a database restore.
 
@@ -329,4 +383,4 @@ Back up SQLite using its online backup API (Python `sqlite3.Connection.backup`) 
 - This is a shared, unauthenticated demonstration workspace: public visitors can modify its data. Use synthetic content only. CORS controls browser origins, not authorization. Do not use this app for confidential production meetings.
 - Optional global transcript search/snippets/deep links are implemented. Optional comments, soundbites, exports, tags, Ask AI, and dark mode are not implemented. The settings previews do not persist preferences.
 - Visual references are official Fireflies guide screenshots; no attached dashboard/detail screenshot file was available in this workspace. Desktop/mobile layout checks pass, but pixel-perfect equivalence to an unavailable attachment cannot be certified.
-- Hosting accounts, billed storage provisioning, a verified public application URL, and publishing the final local changes remain external submission steps. CI is supplied but its GitHub run must be verified after publication. The candidate must understand/explain the implementation in the interview; automated checks cannot certify that requirement.
+- The public URLs passed the limited checks recorded above. Durable hosted SQLite storage and full public browser CRUD verification remain outstanding. The current free demo resets user changes on sleep/restart/redeploy; local storage remains persistent. CI is supplied but its GitHub run must be verified after publication. The candidate must understand/explain the implementation in the interview; automated checks cannot certify that requirement.
